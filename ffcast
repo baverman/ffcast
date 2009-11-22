@@ -26,6 +26,7 @@ FPS='15'
 PRESET='lossless_slow'
 CODEC='x264'
 BORDERLESS='1'
+FFMOD='2'
 DEBUG='/dev/null'
 # }}}
 
@@ -47,6 +48,7 @@ cat << EOF
     -r,--rate        Frame Rate (FPS) (def: ${FPS})
     -i,--winid       Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
     -n,--winno       Number of window(s) to be captured, use w/o -i or -f
+    -m,--mod16       Force ffmpeg frame size to be mod 16
     -b,--borderless  Ignore borders of window(s) [default]
     -B,--border      Do not ignore borders (opposite to -b)
     -f,--fullscreen  Capture full screen, aka \`-i root\`
@@ -60,6 +62,8 @@ EOF
 # nipper16 shrinks to mod 16
 tucker16 () { echo $(( $1 + (16 - ($1 % 16)) % 16 )); }
 nipper16 () { echo $(( $1 / 16 * 16 )); }
+tucker2 () { echo $(( $1 + (2 - ($1 % 2)) % 2 )); }
+nipper2 () { echo $(( $1 / 2 * 2 )); }
 min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
 max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
 
@@ -125,11 +129,11 @@ window_info () {
     [ -z "$wininfo" ] && { echo "(EE) xwininfo failure"; exit 1; }
     unset wininfo
     # sanity: mod 16 & inside screen
-    LEN_X=$(tucker16 $(( rootx - POS_X - SOP_X )))
-    LEN_Y=$(tucker16 $(( rooty - POS_Y - SOP_Y )))
+    LEN_X=$(tucker${FFMOD} $(( rootx - POS_X - SOP_X )))
+    LEN_Y=$(tucker${FFMOD} $(( rooty - POS_Y - SOP_Y )))
     echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
-    LEN_X=$(min $LEN_X $(nipper16 $(( rootx - POS_X ))))
-    LEN_Y=$(min $LEN_Y $(nipper16 $(( rooty - POS_Y ))))
+    LEN_X=$(min $LEN_X $(nipper${FFMOD} $(( rootx - POS_X ))))
+    LEN_Y=$(min $LEN_Y $(nipper${FFMOD} $(( rooty - POS_Y ))))
     echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
     echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
 }
@@ -144,6 +148,7 @@ until [ -z "$1" ] ; do
         -B|--border)     BORDERLESS=  ; shift ;;
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
+        -m|--mod16)      FFMOD="16" ; shift 2 ;;
         -c|--codec)      CODEC="$2" ; shift 2 ;;
         -r|--rate)       FPS="$2" ; shift 2 ;;
         -p|--preset)     PRESET="$2" ; shift 2 ;;
