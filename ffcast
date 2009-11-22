@@ -5,12 +5,16 @@
 # Original Author: Copyright (c) Michal Witkowski 2009
 # License: GPL v3
 # Modified by: lolilolicon (and he likes to call it ffcast)
+# lolilolicon <lolilolicon@gmail.com>
+# git clone git://github.com/lolilolicon/ffcast.git
 
+# TODO: (+ means done.)
 # xwininfo -display ${display} -- so we add an option for display
 # + add support for multi-window recording, like with gimp
 # + sanity: ffmpeg will quit if geometry is out of screen
 # + use Corners instead of Width/Height for the sake of Border width
 # area selection, like drag a rectangle, instead of click windows
+# multi-head support? only if ffmpeg could record multiple screens
 
 # {{{ defaults
 PRGNAME='ffcast' PRGVER='0.1'
@@ -25,17 +29,20 @@ CODEC='x264'
 
 # {{{ functions
 usage () {
+local ffcast=$(basename "${PRGSELF}")
 cat << EOF
 
-    % ${PRGNAME} % <${PRGVER}> ::${PRGDESC}
+    % ${PRGNAME} % <${PRGVER}>
+         :: ${PRGDESC}
 
-    Usage: $(basename "${PRGSELF}") <options>
+    Usage:  ${ffcast} -b -n 3 -o cast.mkv
+            ${ffcast} -i "0x60001b 0x1c00016"
 
     OPTIONS:
-    -o,--output      Output file. Container can be mp4, mkv or avi
-    -p,--preset      Encode preset to use. (def: 'lossless_slow', see /usr/share/ffmpeg/)
-    -c,--codec       Codec to use (def: 'x264', ['x264'])
-    -r,--rate        Frame Rate (FPS) (def: 15)
+    -o,--output      Output file. Supported formats:  mp4, mkv or avi
+    -p,--preset      x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
+    -c,--codec       Codec to use (def: '${CODEC}', ['x264'])
+    -r,--rate        Frame Rate (FPS) (def: ${FPS})
     -i,--winid       Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
     -n,--winno       Number of window(s) to be captured, use w/o -i or -f
     -b,--borderless  Ignore borders of window(s)
@@ -51,6 +58,16 @@ tucker16 () { echo $(( $1 + (16 - ($1 % 16)) % 16 )); }
 nipper16 () { echo $(( $1 / 16 * 16 )); }
 min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
 max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
+
+check_apps () {
+    local app oops=
+    for app in ffmpeg xwininfo ; do
+        which "${app}" &>/dev/null || {
+        echo "(EE) ${app} not found in PATH"; oops=1; }
+    done
+    [ "${oops}" ] && {
+    echo "(EE) Required program(s) not found in PATH"; exit 1; }
+}
 
 window_info () {
     local wininfo regex rootx rooty SOP_X SOP_Y DEC_W=0
@@ -132,7 +149,7 @@ done
 # }}}
 
 # {{{ main
-# XXX check apps here
+check_apps
 
 [ -z "${DISPLAY}" ] && { echo '(EE) X not running'; exit 1; }
 
