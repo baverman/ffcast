@@ -1,0 +1,167 @@
+#!/bin/bash
+###::: take screencast using ffmpeg with the help of xwininfo
+# Original: http://bbs.archlinux.org/viewtopic.php?id=85237
+#           http://continuity.intelink.pl/~neuro/projects/lossless_screencast.sh
+#   Screencast script.
+#   Copyright (c) Michal Witkowski 2009
+#   License: GPL 3
+#   ver 0.1
+# Modified by: lolilolicon (and he likes to call it ffcast)
+
+# xwininfo -display ${display} -- so we add an option for display
+# + add support for multi-window recording, like with gimp
+# + sanity: ffmpeg will quit if geometry is out of screen
+# + use Corners instead of Width/Height for the sake of Border width
+# area selection, like drag a rectangle, instead of click windows
+
+# {{{ defaults
+PRGNAME='ffcast' PRGVER='0.1'
+PRGDESC='take screencast using ffmpeg with the help of xwininfo'
+PRGSELF=$(readlink -f "$0")
+EXT='avi'
+OUTPUT="${PRGNAME}.$(date +%y%m%d%H%M%S).${EXT}"
+FPS='15'
+PRESET='lossless_slow'
+CODEC='x264'
+# }}}
+
+# {{{ functions
+usage () {
+cat << EOF
+
+    % ${PRGNAME} % <${PRGVER}> ::${PRGDESC}
+
+    Usage: $(basename "${PRGSELF}") <options>
+
+    OPTIONS:
+    -o,--output      Output file. Container can be mp4, mkv or avi
+    -p,--preset      Encode preset to use. (def: 'lossless_slow', see /usr/share/ffmpeg/)
+    -c,--codec       Codec to use (def: 'x264', ['x264'])
+    -r,--rate        Frame Rate (FPS) (def: 15)
+    -i,--winid       Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
+    -n,--winno       Number of window(s) to be captured, use w/o -i or -f
+    -b,--borderless  Ignore borders of window(s)
+    -f,--fullscreen  Capture full screen, aka \`-i root\`
+    -h,--help        Show this message
+
+EOF
+}
+
+# tucker16 expands to mod 16
+# nipper16 shrinks to mod 16
+tucker16 () { echo $(( $1 + (16 - ($1 % 16)) % 16 )); }
+nipper16 () { echo $(( $1 / 16 * 16 )); }
+min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
+max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
+
+window_info () {
+    local wininfo regex rootx rooty SOP_X SOP_Y DEC_W=0
+    regex='Width: +([0-9]+).*Height: +([0-9]+)'
+    wininfo=$(LANG='' xwininfo -root)
+    if [[ "$wininfo" =~ $regex ]]
+    then
+        rootx=${BASH_REMATCH[1]}
+        rooty=${BASH_REMATCH[2]}
+    else
+        echo "(EE) xwininfo returned wrong Data (root):"
+        echo "$wininfo" ; exit 1
+    fi
+    case "${WINID,,}" in
+        '')
+        echo ":: Click to select ${WINNO:-1} window(s) to be captured"
+        for ((i=1;i<=${WINNO:-1};i++)); do
+            WINIDS+=("$i")
+        done
+        wininfo () { LANG='' xwininfo ; } ;;
+        root)
+        echo ":: Fullscreen capture may take a while"
+        WINIDS=($WINID)
+        wininfo () { LANG='' xwininfo -root ; } ;;
+        *)
+        echo ":: Selected window(s): $WINID"
+        WINIDS=($WINID)
+        wininfo () { LANG='' xwininfo -id $WINID ; } ;;
+    esac
+    regex='Border width: +([0-9]+).*Corners: +\+(-?[0-9]+)\+(-?[0-9]+).* +-(-?[0-9]+)-(-?[0-9]+)'
+    # support for multiple windows
+    for WINID in "${WINIDS[@]}"; do
+        echo -ne "\033[s:: Selecting $WINID of ${#WINIDS[@]} window(s)"
+        wininfo=$(wininfo) || { echo "(WW) xwininfo error @ window $WINID"; continue; }
+        if [[ "$wininfo" =~ $regex ]]
+        then
+            [ "$BORDERLESS" ] && DEC_W=${BASH_REMATCH[1]}
+            # inside screen, they must be -ge 0 [max]
+            # multiple windows, we pick the [min]
+            POS_X=$(min ${POS_X} $(max 0 $(( ${BASH_REMATCH[2]} + DEC_W ))))
+            POS_Y=$(min ${POS_Y} $(max 0 $(( ${BASH_REMATCH[3]} + DEC_W ))))
+            SOP_X=$(min ${SOP_X} $(max 0 $(( ${BASH_REMATCH[4]} + DEC_W ))))
+            SOP_Y=$(min ${SOP_Y} $(max 0 $(( ${BASH_REMATCH[5]} + DEC_W ))))
+        else
+            echo "(EE) xwininfo returned wrong Data:"
+            echo "$wininfo" ; exit 1
+        fi
+        echo -ne '\033[u\033[K'
+        #echo "(DD) ($POS_X,$POS_Y) ($SOP_X,$SOP_Y)"
+    done
+    [ -z "$wininfo" ] && { echo "(EE) xwininfo failure"; exit 1; }
+    unset wininfo
+    # sanity: mod 16 & inside screen
+    LEN_X=$(tucker16 $(( rootx - POS_X - SOP_X )))
+    LEN_Y=$(tucker16 $(( rooty - POS_Y - SOP_Y )))
+    #echo "(DD) $LEN_X x $LEN_Y"
+    LEN_X=$(min $LEN_X $(nipper16 $(( rootx - POS_X ))))
+    LEN_Y=$(min $LEN_Y $(nipper16 $(( rooty - POS_Y ))))
+    #echo "(DD) $LEN_X x $LEN_Y"
+    echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
+}
+# }}}
+
+# {{{ options
+until [ -z "$1" ] ; do
+    case "$1" in
+        -h|--help)       usage ; exit 0 ;;
+        -f|--fullscreen) WINID="root" ; shift ;;
+        -b|--borderless) BORDERLESS=1 ; shift ;;
+        -i|--winid)      WINID="$2" ; shift 2 ;;
+        -n|--winno)      WINNO="$2" ; shift 2 ;;
+        -c|--codec)      CODEC="$2" ; shift 2 ;;
+        -r|--rate)       FPS="$2" ; shift 2 ;;
+        -p|--preset)     PRESET="$2" ; shift 2 ;;
+        -o|--output)     OUTPUT="$2" ; shift 2 ;;
+        *)               echo "(EE) invalid option $1"; usage; exit 1 ;;
+    esac
+done
+# }}}
+
+# {{{ main
+# XXX check apps here
+
+[ -z "${DISPLAY}" ] && { echo '(EE) X not running'; exit 1; }
+
+# is there a way to do ${OUTPUT##*.,,} ?
+( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
+echo "(WW) output: unsupported format"
+echo "(WW) output: falling back to ${EXT}"
+OUTPUT="${OUTPUT}.${EXT}"; }
+
+while [ -f "${OUTPUT}" ] ; do
+    echo "(WW) output: file exists: ${OUTPUT}"
+    OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
+    echo "(WW) output: output name: ${OUTPUT}"
+done
+
+case "${CODEC,,}" in
+    x264)
+    VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
+esac
+
+window_info
+
+echo ":: Capture started, press [q] to finish"
+ffmpeg -r ${FPS} -v 1  \
+    -s ${LEN_X}x${LEN_Y} -an \
+    -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} -vcodec ${VCODEC} \
+    -threads 0 "${OUTPUT}" 2>/dev/null
+echo ":: output: output name: ${OUTPUT}"
+# }}}
+# vim: fdm=marker
