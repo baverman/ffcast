@@ -25,6 +25,8 @@ OUTPUT="${PRGNAME}.$(date +%y%m%d%H%M%S).${EXT}"
 FPS='15'
 PRESET='lossless_slow'
 CODEC='x264'
+FORMAT='h264'
+GUESSFMT='1'
 BORDERLESS='1'
 FFMOD='2'
 DEBUG='/dev/null'
@@ -38,33 +40,34 @@ cat << EOF
     % ${PRGNAME} % <${PRGVER}>
          :: ${PRGDESC}
 
-    Usage:  ${ffcast} -b -n 3 -o cast.mkv
-            ${ffcast} -i "0x60001b 0x1c00016"
+    Usage:  ${ffcast} -b -n 3 -o /tmp/cast.mkv
+            ${ffcast} -B -m -i "0x60001b 0x1c00016"
 
     OPTIONS:
-    -o,--output      Output file. Supported formats:  mp4, mkv or avi
-    -p,--preset      x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
-    -c,--codec       Codec to use (def: '${CODEC}', ['x264'])
-    -r,--rate        Frame Rate (FPS) (def: ${FPS})
-    -i,--winid       Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
-    -n,--winno       Number of window(s) to be captured, use w/o -i or -f
-    -m,--mod16       Force ffmpeg frame size to be mod 16
+    -o,--output:     Output file. Supported formats:  mp4, mkv or avi
+    -n,--winno:      Number of window(s) to be captured, use w/o -i or -f
+    -i,--winid:      Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
+    -a,--fullscreen  Capture full screen, aka \`-i root\`
     -b,--borderless  Ignore borders of window(s) [default]
     -B,--border      Do not ignore borders (opposite to -b)
-    -f,--fullscreen  Capture full screen, aka \`-i root\`
+    -m,--mod16       Force ffmpeg frame size to be mod 16
+    -c,--codec:      Codec to use (def: '${CODEC}', use ? or list for a list)
+    -f,--format:     Force format (def: '${FORMAT}', use ? or list for a list)
+    -g,--guessfmt    Let ffmpeg guess format according to filename extention [default]
+    -G,--noguessfmt  Do not guess format, respect default format: '${FORMAT}'
+    -p,--preset:     x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
+    -r,--rate:       Frame Rate (FPS) (def: ${FPS})
     -v,--debug       print verbose debug info to stderr
     -h,--help        Show this message
 
 EOF
 }
-
 # tucker M N expands N to mod M
 # nipper M N shrinks N to mod M
 tucker () { local m=$1; shift; echo $(( $1 + ($m - ($1 % $m)) % $m )); }
 nipper () { local m=$1; shift; echo $(( $1 / $m * $m )); }
 min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
 max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
-
 check_apps () {
     local app oops=
     for app in ffmpeg xwininfo ; do
@@ -74,7 +77,6 @@ check_apps () {
     [ "${oops}" ] && {
     echo "(EE) Required program(s) not found in PATH"; exit 1; }
 }
-
 window_info () {
     local wininfo regex rootx rooty SOP_X SOP_Y DEC_W=0
     regex='Width: +([0-9]+).*Height: +([0-9]+)'
@@ -135,24 +137,53 @@ window_info () {
     echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
     echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
 }
+listEVcodecs () {
+    echo x264
+    ffmpeg -formats 2>/dev/null | \
+    sed '/^ \+[D ]EV[S ][D ][T ] \+\([^ ]*\).*/!d;s//\1/'
+}
+valueEVcodec () {
+    local evc="$1" EVC=
+    [[ "${evc,,}" =~ ^\?$|^list$ ]] && { listEVcodecs; exit 0; }
+    EVC=$(listEVcodecs | grep -Fxi "$evc" &>/dev/null) && CODEC="$EVC" \
+    || {
+    echo "(WW) ffmpeg: unsupported codec: $evc"
+    echo "(WW) falling back to codec: ${CODEC}"; }
+}
+listEVformats () {
+    ffmpeg -formats 2>/dev/null | \
+    sed '/^ \+[D ]E \+\([^ ]*\).*/!d;s//\1/'
+}
+valueEVformat () {
+    GUESSFMT=
+    local evf="$1" EVF=
+    [[ "${evf,,}" =~ ^\?$|^list$ ]] && { listEVformats; exit 0; }
+    EVF=$(listEVformats | grep -Fxi "$evf" &>/dev/null) && FORMAT="$EVF" \
+    || {
+    echo "(WW) ffmpeg: unsupported format: $evf"
+    echo "(WW) falling back to format: ${FORMAT}"; }
+}
 # }}}
 
 # {{{ options
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
-        -f|--fullscreen) WINID="root" ; shift ;;
+        -a|--fullscreen) WINID="root" ; shift ;;
         -b|--borderless) BORDERLESS=1 ; shift ;;
         -B|--border)     BORDERLESS=  ; shift ;;
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
         -m|--mod16)      FFMOD="16" ; shift ;;
-        -c|--codec)      CODEC="$2" ; shift 2 ;;
+        -c|--codec)      valueEVcodec "$2" ; shift 2 ;;
+        -f|--format)     valueEVformat "$2" ; shift 2 ;;
+        -g|--guessfmt)   GUESSFMT=1 ; shift ;;
+        -G|--noguessfmt) GUESSFMT=  ; shift ;;
         -r|--rate)       FPS="$2" ; shift 2 ;;
         -p|--preset)     PRESET="$2" ; shift 2 ;;
         -o|--output)     OUTPUT="$2" ; shift 2 ;;
-        -v|--debug)      DEBUG='/dev/stderr'; shift ;;
-        *)               echo "(EE) invalid option $1"; usage; exit 1 ;;
+        -v|--debug)      DEBUG='/dev/stderr' ; shift ;;
+        *)               echo "(EE) invalid option $1" ; exit 1 ;;
     esac
 done
 # }}}
@@ -163,10 +194,13 @@ check_apps
 [ -z "${DISPLAY}" ] && { echo '(EE) X not running'; exit 1; }
 
 # is there a way to do ${OUTPUT##*.,,} ?
-( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
-echo "(WW) output: unsupported format"
-echo "(WW) output: falling back to ${EXT}"
-OUTPUT="${OUTPUT}.${EXT}"; }
+#( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
+#echo "(WW) output: unsupported format"
+#echo "(WW) output: falling back to ${EXT}"
+#OUTPUT="${OUTPUT}.${EXT}"; }
+# this block of code should be gone forever!!
+# -- well, only when we can deal with format AND codec well enough?
+# or develop this further to a function check_extention()?
 
 while [ -f "${OUTPUT}" ] ; do
     echo "(WW) output: file exists: ${OUTPUT}"
@@ -177,15 +211,21 @@ done
 case "${CODEC,,}" in
     x264)
     VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
+    *)
+    VCODEC="${CODEC}"
 esac
+VCODEC="-vcodec ${VCODEC}"
+[ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
+# maybe add check_extention when GUESSFMT=1?
 
 window_info
 
 echo ":: Capture started, press [q] to finish"
+# -threads 0 was in the original, but segfaults with, say -vcodec flv
 ffmpeg -r ${FPS} -v 1  \
     -s ${LEN_X}x${LEN_Y} -an \
-    -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} -vcodec ${VCODEC} \
-    -threads 0 "${OUTPUT}" 2>"${DEBUG}"
+    -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
+    ${VCODEC} ${FORMAT} "${OUTPUT}" 2>"${DEBUG}"
 echo ":: output: output name: ${OUTPUT}"
 # }}}
 # vim: fdm=marker
