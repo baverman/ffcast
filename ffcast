@@ -148,7 +148,7 @@ until [ -z "$1" ] ; do
         -B|--border)     BORDERLESS=  ; shift ;;
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
-        -m|--mod16)      FFMOD="16" ; shift 2 ;;
+        -m|--mod16)      FFMOD="16" ; shift ;;
         -c|--codec)      CODEC="$2" ; shift 2 ;;
         -r|--rate)       FPS="$2" ; shift 2 ;;
         -p|--preset)     PRESET="$2" ; shift 2 ;;
