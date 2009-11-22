@@ -25,6 +25,8 @@ OUTPUT="${PRGNAME}.$(date +%y%m%d%H%M%S).${EXT}"
 FPS='15'
 PRESET='lossless_slow'
 CODEC='x264'
+BORDERLESS='1'
+DEBUG='/dev/null'
 # }}}
 
 # {{{ functions
@@ -45,8 +47,10 @@ cat << EOF
     -r,--rate        Frame Rate (FPS) (def: ${FPS})
     -i,--winid       Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
     -n,--winno       Number of window(s) to be captured, use w/o -i or -f
-    -b,--borderless  Ignore borders of window(s)
+    -b,--borderless  Ignore borders of window(s) [default]
+    -B,--border      Do not ignore borders (opposite to -b)
     -f,--fullscreen  Capture full screen, aka \`-i root\`
+    -v,--debug       print verbose debug info to stderr
     -h,--help        Show this message
 
 EOF
@@ -116,17 +120,17 @@ window_info () {
             echo "$wininfo" ; exit 1
         fi
         echo -ne '\033[u\033[K'
-        #echo "(DD) ($POS_X,$POS_Y) ($SOP_X,$SOP_Y)"
+        echo "(DD) ($POS_X,$POS_Y) ($SOP_X,$SOP_Y)" >"${DEBUG}"
     done
     [ -z "$wininfo" ] && { echo "(EE) xwininfo failure"; exit 1; }
     unset wininfo
     # sanity: mod 16 & inside screen
     LEN_X=$(tucker16 $(( rootx - POS_X - SOP_X )))
     LEN_Y=$(tucker16 $(( rooty - POS_Y - SOP_Y )))
-    #echo "(DD) $LEN_X x $LEN_Y"
+    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
     LEN_X=$(min $LEN_X $(nipper16 $(( rootx - POS_X ))))
     LEN_Y=$(min $LEN_Y $(nipper16 $(( rooty - POS_Y ))))
-    #echo "(DD) $LEN_X x $LEN_Y"
+    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
     echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
 }
 # }}}
@@ -137,12 +141,14 @@ until [ -z "$1" ] ; do
         -h|--help)       usage ; exit 0 ;;
         -f|--fullscreen) WINID="root" ; shift ;;
         -b|--borderless) BORDERLESS=1 ; shift ;;
+        -B|--border)     BORDERLESS=  ; shift ;;
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
         -c|--codec)      CODEC="$2" ; shift 2 ;;
         -r|--rate)       FPS="$2" ; shift 2 ;;
         -p|--preset)     PRESET="$2" ; shift 2 ;;
         -o|--output)     OUTPUT="$2" ; shift 2 ;;
+        -v|--debug)      DEBUG='/dev/stderr'; shift ;;
         *)               echo "(EE) invalid option $1"; usage; exit 1 ;;
     esac
 done
@@ -176,7 +182,7 @@ echo ":: Capture started, press [q] to finish"
 ffmpeg -r ${FPS} -v 1  \
     -s ${LEN_X}x${LEN_Y} -an \
     -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} -vcodec ${VCODEC} \
-    -threads 0 "${OUTPUT}" 2>/dev/null
+    -threads 0 "${OUTPUT}" 2>"${DEBUG}"
 echo ":: output: output name: ${OUTPUT}"
 # }}}
 # vim: fdm=marker
