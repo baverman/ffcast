@@ -2,10 +2,8 @@
 ###::: take screencast using ffmpeg with the help of xwininfo
 # Original: http://bbs.archlinux.org/viewtopic.php?id=85237
 #           http://continuity.intelink.pl/~neuro/projects/lossless_screencast.sh
-#   Screencast script.
-#   Copyright (c) Michal Witkowski 2009
-#   License: GPL 3
-#   ver 0.1
+# Original Author: Copyright (c) Michal Witkowski 2009
+# License: GPL v3
 # Modified by: lolilolicon (and he likes to call it ffcast)
 
 # xwininfo -display ${display} -- so we add an option for display
