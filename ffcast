@@ -13,7 +13,7 @@
 # + add support for multi-window recording, like with gimp
 # + sanity: ffmpeg will quit if geometry is out of screen
 # + use Corners instead of Width/Height for the sake of Border width
-# area selection, like drag a rectangle, instead of click windows
+# + area selection, like drag a rectangle, instead of click windows (xrectsel)
 # multi-head support? only if ffmpeg could record multiple screens
 
 # {{{ defaults
@@ -27,6 +27,7 @@ PRESET='lossless_slow'
 CODEC='x264'
 FORMAT='h264'
 GUESSFMT='1'
+XRECTSEL='1'
 BORDERLESS='1'
 FFMOD='2'
 DEBUG='/dev/null'
@@ -45,18 +46,23 @@ cat << EOF
 
     OPTIONS:
     -o,--output:     Output file. Supported formats:  mp4, mkv or avi
+    -s,--xrectsel)   Select capture area by mouse dragging (mimics scrot -s, but must drag)
+    -S,--noxrectsel) Use xwininfo to define capture area, either by click or window IDs
+    -m,--mod16       Force ffmpeg frame size to be mod 16
+
     -n,--winno:      Number of window(s) to be captured, use w/o -i or -f
     -i,--winid:      Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
     -a,--fullscreen  Capture full screen, aka \`-i root\`
     -b,--borderless  Ignore borders of window(s) [default]
     -B,--border      Do not ignore borders (opposite to -b)
-    -m,--mod16       Force ffmpeg frame size to be mod 16
+
     -c,--codec:      Codec to use (def: '${CODEC}', use ? or list for a list)
     -f,--format:     Force format (def: '${FORMAT}', use ? or list for a list)
     -g,--guessfmt    Let ffmpeg guess format according to filename extention [default]
     -G,--noguessfmt  Do not guess format, respect default format: '${FORMAT}'
     -p,--preset:     x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
     -r,--rate:       Frame Rate (FPS) (def: ${FPS})
+
     -v,--debug       print verbose debug info to stderr
     -h,--help        Show this message
 
@@ -70,25 +76,39 @@ min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
 max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
 check_apps () {
     local app oops=
-    for app in ffmpeg xwininfo ; do
+    for app in ffmpeg xwininfo xrectsel; do
         which "${app}" &>/dev/null || {
         echo "(EE) ${app} not found in PATH"; oops=1; }
     done
     [ "${oops}" ] && {
     echo "(EE) Required program(s) not found in PATH"; exit 1; }
 }
-window_info () {
-    local wininfo regex rootx rooty SOP_X SOP_Y DEC_W=0
-    regex='Width: +([0-9]+).*Height: +([0-9]+)'
-    wininfo=$(LANG='' xwininfo -root)
+rootwin_xy () {
+    # global: defines: RLEN_X RLEN_Y
+    local regex='Width: +([0-9]+).*Height: +([0-9]+)'
+    local wininfo=$(LANG='' xwininfo -root)
     if [[ "$wininfo" =~ $regex ]]
     then
-        rootx=${BASH_REMATCH[1]}
-        rooty=${BASH_REMATCH[2]}
+        RLEN_X=${BASH_REMATCH[1]}
+        RLEN_Y=${BASH_REMATCH[2]}
     else
         echo "(EE) xwininfo returned wrong Data (root):"
         echo "$wininfo" ; exit 1
     fi
+}
+geo_sanity () {
+    # global: LEN_X LEN_Y POS_X POS_Y RLEN_X RLEN_Y FFMOD DEBUG
+    # mod FFMOD & inside screen
+    LEN_X=$(tucker ${FFMOD} $LEN_X)
+    LEN_Y=$(tucker ${FFMOD} $LEN_Y)
+    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
+    LEN_X=$(min $LEN_X $(nipper ${FFMOD} $(( RLEN_X - POS_X ))))
+    LEN_Y=$(min $LEN_Y $(nipper ${FFMOD} $(( RLEN_Y - POS_Y ))))
+    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
+    echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
+}
+window_info () {
+    local wininfo regex SOP_X SOP_Y DEC_W=0
     case "${WINID,,}" in
         '')
         echo ":: Click to select ${WINNO:-1} window(s) to be captured"
@@ -128,14 +148,25 @@ window_info () {
     done
     [ -z "$wininfo" ] && { echo "(EE) xwininfo failure"; exit 1; }
     unset wininfo
-    # mod FFMOD & inside screen
-    LEN_X=$(tucker ${FFMOD} $(( rootx - POS_X - SOP_X )))
-    LEN_Y=$(tucker ${FFMOD} $(( rooty - POS_Y - SOP_Y )))
-    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
-    LEN_X=$(min $LEN_X $(nipper ${FFMOD} $(( rootx - POS_X ))))
-    LEN_Y=$(min $LEN_Y $(nipper ${FFMOD} $(( rooty - POS_Y ))))
-    echo "(DD) $LEN_X x $LEN_Y" >"${DEBUG}"
-    echo ":: Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
+    LEN_X=$(( RLEN_X - POS_X - SOP_X ))
+    LEN_Y=$(( RLEN_Y - POS_Y - SOP_Y ))
+    geo_sanity
+}
+rectang_sel () {
+    local regex='([0-9]+)x([0-9]+)\+([0-9]+)\+([0-9]+)'
+    echo ":: Select area to be captured by dragging the mouse"
+    local rsgeo=$(xrectsel)
+    if [[ "${rsgeo}" =~ $regex ]]
+    then
+        LEN_X=${BASH_REMATCH[1]}
+        LEN_Y=${BASH_REMATCH[2]}
+        POS_X=${BASH_REMATCH[3]}
+        POS_Y=${BASH_REMATCH[4]}
+    else
+        echo "(EE) xrectsel returned wrong Data:"
+        echo "$rsgeo" ; exit 1
+    fi
+    geo_sanity
 }
 listEVcodecs () {
     echo x264
@@ -169,6 +200,8 @@ valueEVformat () {
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
+        -s|--xrectsel)   XRECTSEL=1 ; shift ;;
+        -S|--noxrectsel) XRECTSEL=  ; shift ;;
         -a|--fullscreen) WINID="root" ; shift ;;
         -b|--borderless) BORDERLESS=1 ; shift ;;
         -B|--border)     BORDERLESS=  ; shift ;;
@@ -218,7 +251,8 @@ VCODEC="-vcodec ${VCODEC}"
 [ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
 # maybe add check_extention when GUESSFMT=1?
 
-window_info
+rootwin_xy
+[ "${XRECTSEL}" ] && rectang_sel || window_info
 
 echo ":: Capture started, press [q] to finish"
 # -threads 0 was in the original, but segfaults with, say -vcodec flv
