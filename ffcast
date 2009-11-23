@@ -263,7 +263,8 @@ echo ":: Capture started, press [q] to finish"
 ffmpeg -r ${FPS} -v 1  \
     -s ${LEN_X}x${LEN_Y} -an \
     -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
-    ${VCODEC} ${FORMAT} "${OUTPUT}" 2>"${DEBUG}"
+    ${VCODEC} ${FORMAT} "${OUTPUT}" 2>"${DEBUG}" || \
+echo "(EE) ffmpeg: failed, try running with --debug"
 echo ":: output: output name: ${OUTPUT}"
 # }}}
 # vim: fdm=marker
