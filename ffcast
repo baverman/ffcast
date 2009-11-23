@@ -46,7 +46,7 @@ cat << EOF
             ${ffcast} -s -f flv -c flv -o cast.flv --debug
 
     OPTIONS:
-    -o,--output:     Output file. Supported formats:  mp4, mkv or avi
+    -o,--output:     Output file. Supported formats: basically everything ffmpeg supports
     -s,--xrectsel)   Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -S,--noxrectsel) Use xwininfo to define capture area, either by click or window IDs
     -m,--mod16       Force ffmpeg frame size to be mod 16
