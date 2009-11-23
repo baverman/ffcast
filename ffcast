@@ -96,7 +96,7 @@ rootwin_xy () {
         echo "(EE) xwininfo returned wrong Data (root):"
         echo "$wininfo" ; exit 1
     fi
-    echo "(DD) geometry: root: $RLEN_X x $RLEN_Y"
+    echo "(DD) geometry: root: $RLEN_X x $RLEN_Y" >"${DEBUG}"
 }
 geo_sanity () {
     # global: LEN_X LEN_Y POS_X POS_Y RLEN_X RLEN_Y FFMOD DEBUG

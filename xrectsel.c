@@ -36,15 +36,15 @@ Compile: gcc  xrectsel.c -lX11 -o xrectsel
 
 int main(void)
 {
+  Display *disp = XOpenDisplay(NULL);
+  if(!disp)
+    return EXIT_FAILURE;
+
   int rx = 0, ry = 0, rw = 0, rh = 0;
   int rect_x = 0, rect_y = 0, rect_w = 0, rect_h = 0;
   int btn_pressed = 0, done = 0;
 
   XEvent ev;
-  Display *disp = XOpenDisplay(NULL);
-
-  if(!disp)
-    return EXIT_FAILURE;
 
   Screen *scr = NULL;
   scr = ScreenOfDisplay(disp, DefaultScreen(disp));
@@ -73,14 +73,14 @@ int main(void)
        (disp, root, False,
         ButtonMotionMask | ButtonPressMask | ButtonReleaseMask, GrabModeAsync,
         GrabModeAsync, root, cursor, CurrentTime) != GrabSuccess))
-    printf("couldn't grab pointer:");
+    fprintf(stderr, "couldn't grab pointer:");
 
   if ((XGrabKeyboard
        (disp, root, False, GrabModeAsync, GrabModeAsync,
         CurrentTime) != GrabSuccess))
-    printf("couldn't grab keyboard:");
+    fprintf(stderr, "couldn't grab keyboard:");
 
-  while (!done) {
+  while (1) {
     while (!done && XPending(disp)) {
       XNextEvent(disp, &ev);
       switch (ev.type) {
@@ -122,35 +122,53 @@ int main(void)
         case ButtonRelease:
           done = 1;
           break;
+        case KeyPress:
+          fprintf(stderr, "Keyboard pressed, aborting\n");
+          done = 2;
+          break;
+        case KeyRelease:
+          /* ignore */
+          break;
+        default:
+          break;
       }
     }
+    if (done)
+      break;
   }
   /* clear the drawn rectangle */
   if (rect_w) {
     XDrawRectangle(disp, root, gc, rect_x, rect_y, rect_w, rect_h);
     XFlush(disp);
   }
-  rw = ev.xbutton.x - rx;
-  rh = ev.xbutton.y - ry;
-  /* cursor moves backwards */
-  if (rw < 0) {
-    rx += rw;
-    rw = 0 - rw;
-  }
-  if (rh < 0) {
-    ry += rh;
-    rh = 0 - rh;
-  }
-/*
-  printf("rx %d\n", rx);
-  printf("ry %d\n", ry);
-  printf("rw %d\n", rw);
-  printf("rh %d\n", rh);
-*/
-  XCloseDisplay(disp);
+  /* clean up stuff that i don't understand */
+  XUngrabPointer(disp, CurrentTime);
+  XUngrabKeyboard(disp, CurrentTime);
+  XFreeCursor(disp, cursor);
+  XFreeGC(disp, gc);
+  XSync(disp, True);
 
-  printf("%dx%d+%d+%d\n",rw,rh,rx,ry);
+  if (done < 2) {
+    rw = ev.xbutton.x - rx;
+    rh = ev.xbutton.y - ry;
+    // cursor moves backwards
+    if (rw < 0) {
+      rx += rw;
+      rw = 0 - rw;
+    }
+    if (rh < 0) {
+      ry += rh;
+      rh = 0 - rh;
+    }
 
-  return EXIT_SUCCESS;
+    XCloseDisplay(disp);
+
+    printf("%dx%d+%d+%d\n",rw,rh,rx,ry);
+
+    return EXIT_SUCCESS;
+  } else {
+    return EXIT_FAILURE;
+  }
+
 }
 
