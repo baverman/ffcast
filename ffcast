@@ -15,6 +15,9 @@
 # + use Corners instead of Width/Height for the sake of Border width
 # + area selection, like drag a rectangle, instead of click windows (xrectsel)
 # multi-head support? only if ffmpeg could record multiple screens
+# + option to limit capture duration
+# should I add an option that allows user to pass options directly to ffmpeg? \
+#   if I do, will I have to use eval?
 
 # {{{ defaults
 PRGNAME='ffcast' PRGVER='0.1'
@@ -29,6 +32,7 @@ FORMAT='h264'
 GUESSFMT='1'
 XRECTSEL=
 BORDERLESS='1'
+CASTSPAN=
 FFMOD='2'
 DEBUG='/dev/null'
 # }}}
@@ -63,6 +67,7 @@ cat << EOF
     -G,--noguessfmt  Do not guess format, respect default format: '${FORMAT}'
     -p,--preset:     x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
     -r,--rate:       Frame Rate (FPS) (def: ${FPS})
+    -t,--duration:   Restrict cast video duration in seconds; alternatively hh:mm:ss[.xxx]
 
     -v,--debug       print verbose debug info to stderr
     -h,--help        Show this message
@@ -77,7 +82,7 @@ min () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | head -1; }
 max () { LC_ALL=C ; echo "$@" | tr ' ' '\n' | grep . | sort -g | tail -1; }
 check_apps () {
     local app oops=
-    for app in ffmpeg xwininfo xrectsel; do
+    for app in ffmpeg xwininfo xrectsel bc; do
         which "${app}" &>/dev/null || {
         echo "(EE) ${app} not found in PATH"; oops=1; }
     done
@@ -196,6 +201,25 @@ valueEVformat () {
     echo "(WW) ffmpeg: unsupported format: $evf"
     echo "(WW) falling back to format: ${FORMAT}"; }
 }
+hhmmss2sec () {
+    # ffmpeg -t option does support hh:mm:ss[.xxx], but not mm:ss -- too dumb
+    # so let's convert hh:mm:ss to seconds so ffmpeg can understand
+    local hms="$1" smh hh mm ss sech secm secs
+    smh=($(awk -F: '{ for (i = NF; i > 0 ; --i ) print $i }' <<< "${hms}"))
+    ss="${smh[0]:-00}"  ;   secs="${ss}"
+    mm="${smh[1]:-00}"  ;   secm=$(bc <<< "${mm} * 60")
+    hh="${smh[2]:-00}"  ;   sech=$(bc <<< "${hh} * 3600")
+    sec=$(bc <<< "scale=2 ; ${secs} + ${secm} + ${sech}")
+    echo "${sec}"
+}
+sec2hhmmss () {
+    # we'd like to display time in hh:mm:ss.xx format, it's more readable
+    local sec="$1" hh mm ss
+    hh=$(printf "%02d" $(bc <<< "${sec} / 3600"))
+    mm=$(printf "%02d" $(bc <<< "$(bc <<< "${sec} / 60") % 60"))
+    ss=$(printf "%05.2f" $(bc <<< "${sec} % 60"))
+    echo "${hh}:${mm}:${ss}"
+}
 # }}}
 
 # {{{ options
@@ -210,6 +234,7 @@ until [ -z "$1" ] ; do
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
         -m|--mod16)      FFMOD="16" ; shift ;;
+        -t|--duration)   CASTSPAN="$2" ; shift 2 ;;
         -c|--codec)      valueEVcodec "$2" ; shift 2 ;;
         -f|--format)     valueEVformat "$2" ; shift 2 ;;
         -g|--guessfmt)   GUESSFMT=1 ; shift ;;
@@ -256,14 +281,20 @@ echo "(DD) VCODEC: ${VCODEC}" >"${DEBUG}"
 echo "(DD) FORMAT: ${FORMAT}" >"${DEBUG}"
 
 rootwin_xy
-if [ "${XRECTSEL}" ]; then rectang_sel; else window_info; fi
+[ "${XRECTSEL}" ] && rectang_sel || window_info
+
+[ "${CASTSPAN}" ] && {
+CASTSPAN=$(hhmmss2sec ${CASTSPAN})
+echo ":: Capture duration limited to [$(sec2hhmmss ${CASTSPAN})]"
+CASTSPAN="-t ${CASTSPAN}"; }
 
 echo ":: Capture started, press [q] to finish"
 # -threads 0 was in the original, but segfaults with, say -vcodec flv
 ffmpeg -r ${FPS} -v 1  \
     -s ${LEN_X}x${LEN_Y} -an \
     -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
-    ${VCODEC} ${FORMAT} "${OUTPUT}" 2>"${DEBUG}" || \
+    ${VCODEC} ${FORMAT} ${CASTSPAN} \
+    "${OUTPUT}" 2>"${DEBUG}" || \
 echo "(EE) ffmpeg: failed, try running with --debug"
 echo ":: output: output name: ${OUTPUT}"
 # }}}
