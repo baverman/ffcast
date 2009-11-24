@@ -318,7 +318,7 @@ check_vidcodec () {
         x264)
         VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
         gif)
-        VCODEC="rawvideo -pix_fmt rgb24" #XXX ffmpeg sucks at gif
+        VCODEC="rawvideo -pix_fmt rgb24 -loop_output 0" #XXX ffmpeg sucks at gif
         FORMAT="gif" ;;
         *)
         VCODEC="${CODEC}" ;;
@@ -327,7 +327,7 @@ check_vidcodec () {
         gif)
         wrn "ffmpeg: -vcodec gif is broken, using rawvideo"
         wrn "ffmpeg: gif output can be HUGE [uncompressed]" #XXX really?
-        VCODEC="rawvideo -pix_fmt rgb24" #XXX ffmpeg sucks at gif
+        VCODEC="rawvideo -pix_fmt rgb24 -loop_output 0" #XXX ffmpeg sucks at gif
         ;;
         *)
         FORMAT="${FORMAT}"
