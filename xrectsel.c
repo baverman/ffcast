@@ -16,119 +16,121 @@ main.c from scrot:
 
 */
 
-#include <X11/Xlib.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <X11/Xlib.h>
 #include <X11/cursorfont.h>
 
-static char self[] = "xrectsel" ;
+static char self[] = "xrectsel";
 
-int main()
+int main(void)
 {
-    Display *dpy;
-    XEvent ev;
+  Display *dpy;
+  XEvent ev;
 
-    GC sel_gc;
-    XGCValues sel_gv;
+  GC sel_gc;
+  XGCValues sel_gv;
 
-    Window rootwin;
+  Window rootwin;
 
-    int done = 0;
-    int x, y;
-    int start_x, start_y, width, height;
+  int done = 0, btn_pressed = 0;
+  int x, y;
+  int start_x, start_y, width, height;
 
-    dpy = XOpenDisplay(NULL);
-    if (!dpy) {
-        fprintf(stderr, "%s: Could not open display %s", self, getenv("DISPLAY"));
-    }
+  dpy = XOpenDisplay(NULL);
+  if (!dpy) {
+    fprintf(stderr, "%s: Could not open display %s", self, getenv("DISPLAY"));
+  }
 
-    Cursor cursor;
-    cursor = XCreateFontCursor(dpy, XC_left_ptr);
+  Cursor cursor;
+  cursor = XCreateFontCursor(dpy, XC_left_ptr);
 
-    rootwin = DefaultRootWindow(dpy);
+  rootwin = DefaultRootWindow(dpy);
 
-    XGrabButton(dpy, 1, 0, rootwin, True, ButtonPressMask,
-                GrabModeSync, GrabModeAsync, None, cursor);
+  XGrabButton(dpy, 1, 0, rootwin, True, ButtonPressMask,
+              GrabModeSync, GrabModeAsync, None, cursor);
 
-    /* Grab keyboard */
-    XGrabKeyboard(dpy, rootwin, False, GrabModeAsync, GrabModeAsync, CurrentTime);
+  /* Grab pointer for these events */
+  XGrabPointer(dpy, rootwin, True, PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
+               GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
+  /* Grab keyboard */
+  XGrabKeyboard(dpy, rootwin, False, GrabModeAsync, GrabModeAsync, CurrentTime);
 
-    sel_gv.function = GXinvert;
-    sel_gv.subwindow_mode = IncludeInferiors;
-    sel_gv.line_width = 1;
-    sel_gc = XCreateGC(dpy, rootwin, GCFunction | GCSubwindowMode | GCLineWidth, &sel_gv);
+  sel_gv.function = GXinvert;
+  sel_gv.subwindow_mode = IncludeInferiors;
+  sel_gv.line_width = 1;
+  sel_gc = XCreateGC(dpy, rootwin, GCFunction | GCSubwindowMode | GCLineWidth, &sel_gv);
 
-    for (;;) {
-        XNextEvent(dpy, &ev);
-        switch (ev.type) {
-          case ButtonPress:
-            /* Grab pointer so we receive ButtonRelease */
-             XGrabPointer(dpy, rootwin, True, PointerMotionMask | ButtonReleaseMask,
-                          GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
+  for (;;) {
+    XNextEvent(dpy, &ev);
+    switch (ev.type) {
+      case ButtonPress:
+        btn_pressed = 1;
+        x = start_x = ev.xbutton.x_root;
+        y = start_y = ev.xbutton.y_root;
+        width = height = 0;
+        break;
+      case MotionNotify:
+        /* Draw only if button is pressed */
+        if (btn_pressed) {
+          /* Re-draw last Rectangle to clear it */
+          XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
 
-            x = start_x = ev.xbutton.x_root;
-            x = start_y = ev.xbutton.y_root;
-            width = height = 0;
-            break;
-          case MotionNotify:
-            while (XCheckTypedEvent(dpy, MotionNotify, &ev));
+          width = ev.xbutton.x_root - start_x;
+          height = ev.xbutton.y_root - start_y;
 
-            /* Re-draw last Rectangle to clear it */
-            XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
-
-            width = ev.xbutton.x_root - start_x;
-            height = ev.xbutton.y_root - start_y;
-
-            /* Cursor moves backwards, (x,y) always is the northwest pole */
-            if (width < 0) {
-                width = 0 - width;
-                x = start_x - width;
-            } else {
-                x = start_x;
-            }
-            if (height < 0) {
-                height = 0 - height;
-                y = start_y - height;
-            } else {
-                y = start_y;
-            }
-
-            /* Draw Rectangle */
-            XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
-            break;
-          case ButtonRelease:
-            printf("%ix%i+%i+%i\n", width, height, x, y);
-            done = 1;
-            break;
-          case KeyPress:
-            fprintf(stderr, "%s: Keyboard pressed, aborting\n", self);
-            done = 2;
-            break;
-          case KeyRelease:
-            break;
-          default:
-            break;
+          /* Cursor moves backwards, (x,y) always is the northwest pole */
+          if (width < 0) {
+              width = 0 - width;
+              x = start_x - width;
+          } else {
+              x = start_x;
+          }
+          if (height < 0) {
+              height = 0 - height;
+              y = start_y - height;
+          } else {
+              y = start_y;
+          }
+          /* Draw Rectangle */
+          XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
+          XFlush(dpy);
         }
-        if (done)
-            break;
+        break;
+      case ButtonRelease:
+        done = 1;
+        break;
+      case KeyPress:
+        fprintf(stderr, "%s: Keyboard pressed, aborting\n", self);
+        done = 2;
+        break;
+      case KeyRelease:
+        break;
+      default:
+        break;
     }
+    if (done)
+      break;
+  }
 
-    /* Re-draw last Rectangle to clear it */
-    XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
-    XFlush(dpy);
+  /* Re-draw last Rectangle to clear it */
+  XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
+  XFlush(dpy);
 
-    XUngrabPointer(dpy, CurrentTime);
-    XUngrabKeyboard(dpy, CurrentTime);
-    XFreeCursor(dpy, cursor);
-    XFreeGC(dpy, sel_gc);
-    XSync(dpy, 1);
+  XUngrabButton(dpy, 1, 0, rootwin);
+  XUngrabPointer(dpy, CurrentTime);
+  XUngrabKeyboard(dpy, CurrentTime);
+  XFreeCursor(dpy, cursor);
+  XFreeGC(dpy, sel_gc);
+  XSync(dpy, 1);
 
-    XCloseDisplay(dpy);
+  XCloseDisplay(dpy);
 
-    if (done < 2) {
-      return EXIT_SUCCESS;
-    } else {
-      return EXIT_FAILURE;
-    }
+  if (done < 2) {
+    printf("%ix%i+%i+%i\n", width, height, x, y);
+    return EXIT_SUCCESS;
+  } else {
+    return EXIT_FAILURE;
+  }
 }

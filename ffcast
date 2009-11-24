@@ -266,7 +266,9 @@ window_info () {
 rectang_sel () {
     rootwin_xy
     local regex='([0-9]+)x([0-9]+)\+([0-9]+)\+([0-9]+)'
-    msg "Select area to be captured by dragging the mouse"
+    msg "Select screen area to be captured by mouse drag"
+    msg2 "Drag mouse with button one pressed"
+    msg2 "Press any key on keyboard to abort"
     local rsgeo=$(xrectsel)
     if [[ "${rsgeo}" =~ $regex ]]
     then
