@@ -44,7 +44,7 @@ int main(void)
   }
 
   Cursor cursor;
-  cursor = XCreateFontCursor(dpy, XC_left_ptr);
+  cursor = XCreateFontCursor(dpy, XC_crosshair);
 
   rootwin = DefaultRootWindow(dpy);
 
