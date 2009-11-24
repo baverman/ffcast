@@ -96,6 +96,7 @@ cat << EOF
 
     OPTIONS:
     -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
+                     Output to stdout if - is used, disables --guessfmt
     -s,--xrectsel)   Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -S,--noxrectsel) Use xwininfo to define capture area, either by click or window IDs
     -m,--mod16       Force ffmpeg frame size to be mod 16
@@ -176,6 +177,7 @@ check_outfile () {
     # this block of code should be gone forever!!
     # -- well, only when we can deal with format AND codec well enough?
     # or develop this further to a function check_extention()?
+    [ "${OUTPUT}" == '-' ] && { GUESSFMT= ; return; }
     while [ -f "${OUTPUT}" ] ; do
         wrn "output: file exists: ${OUTPUT}"
         OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
