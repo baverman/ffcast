@@ -48,8 +48,8 @@ int main(void)
 
   rootwin = DefaultRootWindow(dpy);
 
-  XGrabButton(dpy, 1, 0, rootwin, True, ButtonPressMask,
-              GrabModeSync, GrabModeAsync, None, cursor);
+  ////XGrabButton(dpy, 1, 0, rootwin, True, ButtonPressMask,
+  ////            GrabModeSync, GrabModeAsync, None, cursor);
 
   /* Grab pointer for these events */
   XGrabPointer(dpy, rootwin, True, PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
@@ -118,7 +118,7 @@ int main(void)
   XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
   XFlush(dpy);
 
-  XUngrabButton(dpy, 1, 0, rootwin);
+  ////XUngrabButton(dpy, 1, 0, rootwin);
   XUngrabPointer(dpy, CurrentTime);
   XUngrabKeyboard(dpy, CurrentTime);
   XFreeCursor(dpy, cursor);
