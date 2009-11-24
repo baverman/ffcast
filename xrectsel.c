@@ -1,174 +1,134 @@
 /* xrectsel.c
 
 Copyright (C) 2009 lolilolicon <lolilolicon@gmail.com>
-Code ripped and modified from:
-main.c from scrot Copyright (C) 1999,2000 Tom Gilbert.
+License: GPL v3
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to
-deal in the Software without restriction, including without limitation the
-rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-sell copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Description: you drag a rectangle area on screen with mouse,
+             and it prints geometry in the format of wxh+x+y
+Compile: gcc -Wall -Wextra -o xrectsel xrectsel.c -lX11
 
-The above copyright notice and this permission notice shall be included in
-all copies of the Software and its documentation and acknowledgment shall be
-given in the documentation and software packages that this Software was
-used.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Thanks to:
+HashBox, see:
+  http://bbs.archlinux.org/viewtopic.php?id=85378
+main.c from scrot:
+  the early version was ripped and modified from:
+  scrot_sel_and_grab_image(void)
 
 */
-/*
-Description: drag a rectangle area on screen and it prints geometry wxh+x+y
-Compile: gcc  xrectsel.c -lX11 -o xrectsel
-*/
 
-#include<stdio.h>
-#include<stdlib.h>
-#include<X11/Xlib.h>
-#include<X11/cursorfont.h>
+#include <X11/Xlib.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <X11/cursorfont.h>
 
-int main(void)
+static char self[] = "xrectsel" ;
+
+int main()
 {
-  Display *disp = XOpenDisplay(NULL);
-  if(!disp)
-    return EXIT_FAILURE;
+    Display *dpy;
+    XEvent ev;
 
-  int rx = 0, ry = 0, rw = 0, rh = 0;
-  int rect_x = 0, rect_y = 0, rect_w = 0, rect_h = 0;
-  int btn_pressed = 0, done = 0;
+    GC sel_gc;
+    XGCValues sel_gv;
 
-  XEvent ev;
+    Window rootwin;
 
-  Screen *scr = NULL;
-  scr = ScreenOfDisplay(disp, DefaultScreen(disp));
+    int done = 0;
+    int x, y;
+    int start_x, start_y, width, height;
 
-  Window root = 0;
-  root = RootWindow(disp, XScreenNumberOfScreen(scr));
+    dpy = XOpenDisplay(NULL);
+    if (!dpy) {
+        fprintf(stderr, "%s: Could not open display %s", self, getenv("DISPLAY"));
+    }
 
-  Cursor cursor, cursor2;
-  cursor = XCreateFontCursor(disp, XC_left_ptr);
-  cursor2 = XCreateFontCursor(disp, XC_lr_angle);
+    Cursor cursor;
+    cursor = XCreateFontCursor(dpy, XC_left_ptr);
 
-  XGCValues gcval;
-  gcval.foreground = XWhitePixel(disp, 0);
-  gcval.function = GXxor;
-  gcval.background = XBlackPixel(disp, 0);
-  gcval.plane_mask = gcval.background ^ gcval.foreground;
-  gcval.subwindow_mode = IncludeInferiors;
+    rootwin = DefaultRootWindow(dpy);
 
-  GC gc;
-  gc = XCreateGC(disp, root,
-                 GCFunction | GCForeground | GCBackground | GCSubwindowMode,
-                 &gcval);
+    XGrabButton(dpy, 1, 0, rootwin, True, ButtonPressMask,
+                GrabModeSync, GrabModeAsync, None, cursor);
 
-  /* this XGrab* stuff makes XPending true ? */
-  if ((XGrabPointer
-       (disp, root, False,
-        ButtonMotionMask | ButtonPressMask | ButtonReleaseMask, GrabModeAsync,
-        GrabModeAsync, root, cursor, CurrentTime) != GrabSuccess))
-    fprintf(stderr, "couldn't grab pointer:");
+    /* Grab keyboard */
+    XGrabKeyboard(dpy, rootwin, False, GrabModeAsync, GrabModeAsync, CurrentTime);
 
-  if ((XGrabKeyboard
-       (disp, root, False, GrabModeAsync, GrabModeAsync,
-        CurrentTime) != GrabSuccess))
-    fprintf(stderr, "couldn't grab keyboard:");
+    sel_gv.function = GXinvert;
+    sel_gv.subwindow_mode = IncludeInferiors;
+    sel_gv.line_width = 1;
+    sel_gc = XCreateGC(dpy, rootwin, GCFunction | GCSubwindowMode | GCLineWidth, &sel_gv);
 
-  while (1) {
-    while (!done && XPending(disp)) {
-      XNextEvent(disp, &ev);
-      switch (ev.type) {
-        case MotionNotify:
-        /* this case is purely for drawing rect on screen */
-          if (btn_pressed) {
-            if (rect_w) {
-              /* re-draw the last rect to clear it */
-              XDrawRectangle(disp, root, gc, rect_x, rect_y, rect_w, rect_h);
+    for (;;) {
+        XNextEvent(dpy, &ev);
+        switch (ev.type) {
+          case ButtonPress:
+            /* Grab pointer so we receive ButtonRelease */
+             XGrabPointer(dpy, rootwin, True, PointerMotionMask | ButtonReleaseMask,
+                          GrabModeAsync, GrabModeAsync, None, cursor, CurrentTime);
+
+            x = start_x = ev.xbutton.x_root;
+            x = start_y = ev.xbutton.y_root;
+            width = height = 0;
+            break;
+          case MotionNotify:
+            while (XCheckTypedEvent(dpy, MotionNotify, &ev));
+
+            /* Re-draw last Rectangle to clear it */
+            XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
+
+            width = ev.xbutton.x_root - start_x;
+            height = ev.xbutton.y_root - start_y;
+
+            /* Cursor moves backwards, (x,y) always is the northwest pole */
+            if (width < 0) {
+                width = 0 - width;
+                x = start_x - width;
             } else {
-              /* Change the cursor to show we're selecting a region */
-              XChangeActivePointerGrab(disp,
-                                       ButtonMotionMask | ButtonReleaseMask,
-                                       cursor2, CurrentTime);
+                x = start_x;
             }
-            rect_x = rx;
-            rect_y = ry;
-            rect_w = ev.xmotion.x - rect_x;
-            rect_h = ev.xmotion.y - rect_y;
+            if (height < 0) {
+                height = 0 - height;
+                y = start_y - height;
+            } else {
+                y = start_y;
+            }
 
-            if (rect_w < 0) {
-              rect_x += rect_w;
-              rect_w = 0 - rect_w;
-            }
-            if (rect_h < 0) {
-              rect_y += rect_h;
-              rect_h = 0 - rect_h;
-            }
-            /* draw rectangle */
-            XDrawRectangle(disp, root, gc, rect_x, rect_y, rect_w, rect_h);
-            XFlush(disp);
-          }
-          break;
-        case ButtonPress:
-          btn_pressed = 1;
-          rx = ev.xbutton.x;
-          ry = ev.xbutton.y;
-          break;
-        case ButtonRelease:
-          done = 1;
-          break;
-        case KeyPress:
-          fprintf(stderr, "Keyboard pressed, aborting\n");
-          done = 2;
-          break;
-        case KeyRelease:
-          /* ignore */
-          break;
-        default:
-          break;
-      }
-    }
-    if (done)
-      break;
-  }
-  /* clear the drawn rectangle */
-  if (rect_w) {
-    XDrawRectangle(disp, root, gc, rect_x, rect_y, rect_w, rect_h);
-    XFlush(disp);
-  }
-  /* clean up stuff that i don't understand */
-  XUngrabPointer(disp, CurrentTime);
-  XUngrabKeyboard(disp, CurrentTime);
-  XFreeCursor(disp, cursor);
-  XFreeGC(disp, gc);
-  XSync(disp, True);
-
-  if (done < 2) {
-    rw = ev.xbutton.x - rx;
-    rh = ev.xbutton.y - ry;
-    // cursor moves backwards
-    if (rw < 0) {
-      rx += rw;
-      rw = 0 - rw;
-    }
-    if (rh < 0) {
-      ry += rh;
-      rh = 0 - rh;
+            /* Draw Rectangle */
+            XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
+            break;
+          case ButtonRelease:
+            printf("%ix%i+%i+%i\n", width, height, x, y);
+            done = 1;
+            break;
+          case KeyPress:
+            fprintf(stderr, "%s: Keyboard pressed, aborting\n", self);
+            done = 2;
+            break;
+          case KeyRelease:
+            break;
+          default:
+            break;
+        }
+        if (done)
+            break;
     }
 
-    XCloseDisplay(disp);
+    /* Re-draw last Rectangle to clear it */
+    XDrawRectangle(dpy, rootwin, sel_gc, x, y, width, height);
+    XFlush(dpy);
 
-    printf("%dx%d+%d+%d\n",rw,rh,rx,ry);
+    XUngrabPointer(dpy, CurrentTime);
+    XUngrabKeyboard(dpy, CurrentTime);
+    XFreeCursor(dpy, cursor);
+    XFreeGC(dpy, sel_gc);
+    XSync(dpy, 1);
 
-    return EXIT_SUCCESS;
-  } else {
-    return EXIT_FAILURE;
-  }
+    XCloseDisplay(dpy);
 
+    if (done < 2) {
+      return EXIT_SUCCESS;
+    } else {
+      return EXIT_FAILURE;
+    }
 }
-
