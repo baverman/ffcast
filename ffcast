@@ -17,7 +17,7 @@
 # multi-head support? only if ffmpeg could record multiple screens
 # + option to limit capture duration
 # should I add an option that allows user to pass options directly to ffmpeg? \
-#   if I do, will I have to use eval?
+#   if I do, will I have to use eval? -- eval is dangerous
 
 # {{{ defaults
 PRGNAME='ffcast' PRGVER='0.1'
@@ -39,6 +39,7 @@ DEBUG='/dev/null'
 # }}}
 
 # {{{ functions
+# {{{ help functions
 # {{{ helper: printing
 msg () {
     local mesg=$1; shift
@@ -94,7 +95,7 @@ cat << EOF
             ${ffcast} -s -f flv -c flv -o cast.flv --debug
 
     OPTIONS:
-    -o,--output:     Output file. Supported formats: basically everything ffmpeg supports
+    -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
     -s,--xrectsel)   Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -S,--noxrectsel) Use xwininfo to define capture area, either by click or window IDs
     -m,--mod16       Force ffmpeg frame size to be mod 16
@@ -147,8 +148,9 @@ sec2hhmmss () {
     echo "${hh}:${mm}:${ss}"
 }
 # }}}
+# }}}
 # {{{ core functions
-# {{{ helper: core
+# {{{ checker: apps
 check_apps () {
     local app oops=
     for app in ffmpeg xwininfo xrectsel bc; do
@@ -158,6 +160,30 @@ check_apps () {
     [ "${oops}" ] && {
     err "Required program(s) not found in PATH"; exit 1; }
 }
+# }}}
+# {{{ checker: display
+check_display () {
+    [ -z "${DISPLAY}" ] && { err "X not running"; exit 1; }
+}
+# }}}
+# {{{ checker: outfile
+check_outfile () {
+    # is there a way to do ${OUTPUT##*.,,} ?
+    #( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
+    #wrn "output: unsupported format"
+    #wrn "output: falling back to ${EXT}"
+    #OUTPUT="${OUTPUT}.${EXT}"; }
+    # this block of code should be gone forever!!
+    # -- well, only when we can deal with format AND codec well enough?
+    # or develop this further to a function check_extention()?
+    while [ -f "${OUTPUT}" ] ; do
+        wrn "output: file exists: ${OUTPUT}"
+        OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
+        wrn "output: output name: ${OUTPUT}"
+    done
+}
+# }}}
+# {{{ checker: geometry
 rootwin_xy () {
     # global: defines: RLEN_X RLEN_Y
     local regex='Width: +([0-9]+).*Height: +([0-9]+)'
@@ -186,6 +212,7 @@ geo_sanity () {
 # }}}
 # {{{ define capture area with xwininfo
 window_info () {
+    rootwin_xy
     local wininfo regex SOP_X SOP_Y DEC_W=0
     case "${WINID,,}" in
         '')
@@ -235,6 +262,7 @@ window_info () {
 # }}}
 # {{{ define capture area with xrectsel
 rectang_sel () {
+    rootwin_xy
     local regex='([0-9]+)x([0-9]+)\+([0-9]+)\+([0-9]+)'
     msg "Select area to be captured by dragging the mouse"
     local rsgeo=$(xrectsel)
@@ -251,7 +279,12 @@ rectang_sel () {
     geo_sanity
 }
 # }}}
-# {{{ codecs checker
+# {{{ let you select area
+let_you_select () {
+    [ "${XRECTSEL}" ] && rectang_sel || window_info
+}
+# }}}
+# {{{ checker: codecs
 listEVcodecs () {
     echo x264
     ffmpeg -formats 2>/dev/null | \
@@ -277,6 +310,52 @@ valueEVformat () {
     || {
     wrn "ffmpeg: unsupported format: $evf"
     wrn "falling back to format: ${FORMAT}"; }
+}
+check_vidcodec () {
+    case "${CODEC,,}" in
+        x264)
+        VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
+        gif)
+        VCODEC="rawvideo -pix_fmt rgb24" #XXX ffmpeg sucks at gif
+        FORMAT="gif" ;;
+        *)
+        VCODEC="${CODEC}" ;;
+    esac
+    case "${FORMAT,,}" in
+        gif)
+        wrn "ffmpeg: -vcodec gif is broken, using rawvideo"
+        wrn "ffmpeg: gif output can be HUGE [uncompressed]" #XXX really?
+        VCODEC="rawvideo -pix_fmt rgb24" #XXX ffmpeg sucks at gif
+        ;;
+        *)
+        FORMAT="${FORMAT}"
+    esac
+    VCODEC="-vcodec ${VCODEC}"
+    [ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
+    # maybe add check_extention when GUESSFMT=1?
+    dbg "VCODEC: ${VCODEC}"
+    dbg "FORMAT: ${FORMAT}"
+}
+# }}}
+# {{{ checker: duration
+check_castspan () {
+    [ "${CASTSPAN}" ] || return
+    CASTSPAN=$(hhmmss2sec ${CASTSPAN})
+    msg "Capture duration limited to [$(sec2hhmmss ${CASTSPAN})]"
+    CASTSPAN="-t ${CASTSPAN}"
+}
+# }}}
+# {{{ let me capture that with ffmpeg
+let_me_capture () {
+    msg "Capture started, press [q] to finish"
+    # -threads 0 was in the original, but segfaults with, say -vcodec flv
+    ffmpeg -r ${FPS} -v 1  \
+        -s ${LEN_X}x${LEN_Y} -an \
+        -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
+        ${VCODEC} ${FORMAT} ${CASTSPAN} \
+        "${OUTPUT}" 2>"${DEBUG}" || \
+    err "ffmpeg: failed, try running with --debug"
+    msg "Output filename: ${OUTPUT}"
 }
 # }}}
 # }}}
@@ -311,52 +390,11 @@ done
 
 # {{{ main
 check_apps
-
-[ -z "${DISPLAY}" ] && { err "X not running"; exit 1; }
-
-# is there a way to do ${OUTPUT##*.,,} ?
-#( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
-#wrn "output: unsupported format"
-#wrn "output: falling back to ${EXT}"
-#OUTPUT="${OUTPUT}.${EXT}"; }
-# this block of code should be gone forever!!
-# -- well, only when we can deal with format AND codec well enough?
-# or develop this further to a function check_extention()?
-
-while [ -f "${OUTPUT}" ] ; do
-    wrn "output: file exists: ${OUTPUT}"
-    OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
-    wrn "output: output name: ${OUTPUT}"
-done
-
-case "${CODEC,,}" in
-    x264)
-    VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
-    *)
-    VCODEC="${CODEC}" ;;
-esac
-VCODEC="-vcodec ${VCODEC}"
-[ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
-# maybe add check_extention when GUESSFMT=1?
-dbg "VCODEC: ${VCODEC}"
-dbg "FORMAT: ${FORMAT}"
-
-rootwin_xy
-[ "${XRECTSEL}" ] && rectang_sel || window_info
-
-[ "${CASTSPAN}" ] && {
-CASTSPAN=$(hhmmss2sec ${CASTSPAN})
-msg "Capture duration limited to [$(sec2hhmmss ${CASTSPAN})]"
-CASTSPAN="-t ${CASTSPAN}"; }
-
-msg "Capture started, press [q] to finish"
-# -threads 0 was in the original, but segfaults with, say -vcodec flv
-ffmpeg -r ${FPS} -v 1  \
-    -s ${LEN_X}x${LEN_Y} -an \
-    -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
-    ${VCODEC} ${FORMAT} ${CASTSPAN} \
-    "${OUTPUT}" 2>"${DEBUG}" || \
-err "ffmpeg: failed, try running with --debug"
-msg "Output filename: ${OUTPUT}"
+check_display
+check_outfile
+let_you_select
+check_vidcodec
+check_castspan
+let_me_capture
 # }}}
 # vim: fdm=marker
