@@ -97,11 +97,11 @@ cat << EOF
     OPTIONS:
     -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
                      Output to stdout if - is used, disables --guessfmt
-    -s,--xrectsel)   Select capture area by mouse dragging (mimics scrot -s, but must drag)
-    -S,--noxrectsel) Use xwininfo to define capture area, either by click or window IDs
+    -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
+    -S,--noxrectsel  Use xwininfo to define capture area, either by click or window IDs
     -m,--mod16       Force ffmpeg frame size to be mod 16
 
-    -n,--winno:      Number of window(s) to be captured, use w/o -i or -f
+    -n,--winno:      Number of window(s) to be captured, use w/o --winid or --fullscreen
     -i,--winid:      Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
     -a,--fullscreen  Capture full screen, aka \`-i root\`
     -b,--borderless  Ignore borders of window(s) [default]
@@ -111,7 +111,7 @@ cat << EOF
     -f,--format:     Force format (def: '${FORMAT}', use ? or list for a list)
     -g,--guessfmt    Let ffmpeg guess format according to filename extention [default]
     -G,--noguessfmt  Do not guess format, respect default format: '${FORMAT}'
-    -p,--preset:     x264 preset. (def: '${PRESET}', see /usr/share/ffmpeg/)
+    -p,--preset:     x264 preset. (def: '${PRESET}', use ? or list for a list)
     -r,--rate:       Frame Rate (FPS) (def: ${FPS})
     -t,--duration:   Restrict cast video duration in seconds; alternatively hh:mm:ss[.xxx]
 
@@ -289,6 +289,21 @@ let_you_select () {
 }
 # }}}
 # {{{ checker: codecs
+listx264prst () {
+    local PREFIX=$(ffmpeg -version 2>&1 | sed '/.*configuration:.*--prefix=\([^ ]*\).*/!d;s//\1/')
+    PREFIX="${PREFIX:-/usr}"
+    { ls -1 "${PREFIX}"/share/ffmpeg
+      [ -d "${HOME}"/.ffmpeg ] && ls -1 "${HOME}"/.ffmpeg; } | sed 's/libx264-\(.*\)\.ffpreset/\1/'
+    [ -f "$1" ] && echo "$1"
+}
+valuex264prst () {
+    local prst="$1" PRST=
+    [[ "${prst,,}" =~ ^\?$|^list$ ]] && { listx264prst "$prst" ; exit 0; }
+    PRST=$(listx264prst "$prst" | grep -m1 -Fxi "$prst" 2>"${DEBUG}") && PRESET="$PRST" \
+    || {
+    wrn "ffmpeg: x264 preset not found: $prst"
+    wrn "falling back to preset: ${PRESET}"; }
+}
 listEVcodecs () {
     echo x264
     ffmpeg -formats 2>/dev/null | \
@@ -383,7 +398,7 @@ until [ -z "$1" ] ; do
         -g|--guessfmt)   GUESSFMT=1 ; shift ;;
         -G|--noguessfmt) GUESSFMT=  ; shift ;;
         -r|--rate)       FPS="$2" ; shift 2 ;;
-        -p|--preset)     PRESET="$2" ; shift 2 ;;
+        -p|--preset)     valuex264prst "$2" ; shift 2 ;;
         -o|--output)     OUTPUT="$2" ; shift 2 ;;
         -v|--debug)      DEBUG='/dev/stderr' ; shift ;;
            --nocolor)    COLORMSG= ; shift ;;
