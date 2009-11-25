@@ -30,7 +30,7 @@ PRESET='lossless_slow'
 CODEC='x264'
 FORMAT='h264'
 GUESSFMT='1'
-XRECTSEL=
+SELMODE='XWININFO'
 BORDERLESS='1'
 CASTSPAN=
 FFMOD='2'
@@ -92,13 +92,15 @@ cat << EOF
 
     Usage:  ${ffcast} -b -n 3 -o /tmp/cast.mkv
             ${ffcast} -B -m -i "0x60001b 0x1c00016"
-            ${ffcast} -s -f flv -c flv -o cast.flv --debug
+            ${ffcast} -s -t 5:30 -f flv -c flv -o cast.flv --debug
+            ${ffcast} -j '20%,20% 960,600' -r 20 -p ./custom.ffpreset -o cast.mp4
 
     OPTIONS:
     -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
                      Output to stdout if - is used, disables --guessfmt
     -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
-    -S,--noxrectsel  Use xwininfo to define capture area, either by click or window IDs
+    -w,--xwininfo    Use xwininfo to define capture area, either by click or window IDs
+    -j,--xjustcap:   Specify capture area geometry within command line; no manual selection
     -m,--mod16       Force ffmpeg frame size to be mod 16
 
     -n,--winno:      Number of window(s) to be captured, use w/o --winid or --fullscreen
@@ -147,6 +149,11 @@ sec2hhmmss () {
     mm=$(printf "%02d" $(bc <<< "$(bc <<< "${sec} / 60") % 60"))
     ss=$(printf "%05.2f" $(bc <<< "${sec} % 60"))
     echo "${hh}:${mm}:${ss}"
+}
+percen2len () {
+    local val="$1" all="$2"
+    [[ "$val" =~ %$ ]] && { bc <<< "${val%\%} * $all / 100"; return; }
+    echo "$val"
 }
 # }}}
 # }}}
@@ -214,7 +221,6 @@ geo_sanity () {
 # }}}
 # {{{ define capture area with xwininfo
 window_info () {
-    rootwin_xy
     local wininfo regex SOP_X SOP_Y DEC_W=0
     case "${WINID,,}" in
         '')
@@ -224,7 +230,7 @@ window_info () {
         done
         wininfo () { LANG='' xwininfo ; } ;;
         root)
-        msg "Fullscreen capture may take a while"
+        msg "Fullscreen capture"
         WINIDS=($WINID)
         wininfo () { LANG='' xwininfo -root ; } ;;
         *)
@@ -259,12 +265,10 @@ window_info () {
     unset wininfo
     LEN_X=$(( RLEN_X - POS_X - SOP_X ))
     LEN_Y=$(( RLEN_Y - POS_Y - SOP_Y ))
-    geo_sanity
 }
 # }}}
 # {{{ define capture area with xrectsel
 rectang_sel () {
-    rootwin_xy
     local regex='([0-9]+)x([0-9]+)\+([0-9]+)\+([0-9]+)'
     msg "Select screen area to be captured by mouse drag"
     msg2 "Drag mouse with button one pressed"
@@ -280,12 +284,55 @@ rectang_sel () {
         err "xrectsel returned wrong Data:"
         echo "$rsgeo" ; exit 1
     fi
-    geo_sanity
+}
+# }}}
+# {{{ define capture area with prophecy
+g_translate () {
+    msg "Validating user-defined capture geometry"
+    local geo="$1" regex i matched
+
+    # '(x1,y1) (x2, y2)' or 'x1%,y1% x2,y2' and the likes. [diagonal]
+    regex[0]='^[^0-9]*([0-9]+%?), *([0-9]+%?)[^0-9]+([0-9]+%?), *([0-9]+%?)[^0-9]*$'
+    gcalc_0 () {
+        local x1 y1 x2 y2
+        x1=$(percen2len ${BASH_REMATCH[1]} $RLEN_X)
+        y1=$(percen2len ${BASH_REMATCH[2]} $RLEN_Y)
+        x2=$(percen2len ${BASH_REMATCH[3]} $RLEN_X)
+        y2=$(percen2len ${BASH_REMATCH[4]} $RLEN_Y)
+        POS_X=$(min $x1 $x2)
+        POS_Y=$(min $y1 $y2)
+        LEN_X=$(max $(( x1 - x2 )) $(( x2 - x1 )))
+        LEN_Y=$(max $(( y1 - y2 )) $(( y2 - y1 )))
+    }
+
+    # about to add gravity stuff and human language...?
+    # (yes, i kinda admire date -d)
+
+    for ((i=0;i<${#regex[@]};i++)); do
+        if [[ "${geo}" =~ ${regex[$i]} ]];
+        then
+            matched=1
+            msg2 "Valid geometry ${geo//%/%%}"
+            gcalc_$i
+            break
+        fi
+    done
+    [ "${matched}" ] || { err "Invalid geometry: ${geo//%/%%}"; exit 1; }
+
+    for ((i=0;i<${#regex[@]};i++)); do
+        unset gcalc_$i
+    done
 }
 # }}}
 # {{{ let you select area
 let_you_select () {
-    [ "${XRECTSEL}" ] && rectang_sel || window_info
+    rootwin_xy
+    case "${SELMODE}" in
+        XWININFO) window_info ;;
+        XRECTSEL) rectang_sel ;;
+        XJUSTCAP) g_translate "${SELGEOM}" ;;
+    esac
+    geo_sanity
 }
 # }}}
 # {{{ checker: codecs
@@ -381,11 +428,13 @@ let_me_capture () {
 # }}}
 
 # {{{ options
+# left: d e k l q u x y z
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
-        -s|--xrectsel)   XRECTSEL=1 ; shift ;;
-        -S|--noxrectsel) XRECTSEL=  ; shift ;;
+        -s|--xrectsel)   SELMODE='XRECTSEL' ; shift ;;
+        -w|--xwininfo)   SELMODE='XWININFO' ; shift ;;
+        -j|--xjustcap)   SELMODE='XJUSTCAP' ; SELGEOM="$2" ; shift 2 ;;
         -a|--fullscreen) WINID="root" ; shift ;;
         -b|--borderless) BORDERLESS=1 ; shift ;;
         -B|--border)     BORDERLESS=  ; shift ;;
