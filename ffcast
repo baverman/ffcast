@@ -464,6 +464,9 @@ check_castspan () {
 # {{{ let me capture that with ffmpeg
 let_me_capture () {
     msg "Capture started, press [q] to finish"
+    dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s \"%s\"" \
+    ${FPS} ${LEN_X} ${LEN_Y} ${DISPLAY} ${POS_X} ${POS_Y} \
+    "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
     # -threads 0 was in the original, but segfaults with, say -vcodec flv
     ffmpeg -r ${FPS} -v 1  \
         -s ${LEN_X}x${LEN_Y} -an \
