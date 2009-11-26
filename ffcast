@@ -9,7 +9,8 @@
 # git clone git://github.com/lolilolicon/ffcast.git
 
 # TODO: (+ means done.)
-# xwininfo -display ${display} -- so we add an option for display
+# + xwininfo -display ${display} -- so we add an option for display
+#   * xrecsel now takes argv[1] as display, so -d option should be fine now.
 # + add support for multi-window recording, like with gimp
 # + sanity: ffmpeg will quit if geometry is out of screen
 # + use Corners instead of Width/Height for the sake of Border width
@@ -36,6 +37,7 @@ CASTSPAN=
 FFMOD='2'
 COLORMSG='1'
 DEBUG='/dev/null'
+CAPDPY=${DISPLAY}
 # }}}
 
 # {{{ functions
@@ -94,11 +96,12 @@ cat << EOF
             ${ffcast} -B -M -i "0x60001b 0x1c00016"
             ${ffcast} -s -t 5:30 -f flv -c flv -o cast.flv --debug
             ${ffcast} -j '20%,20% 960,600' -r 20 -p ./custom.ffpreset -o cast.mp4
-            ${ffcast} -j '848x640+4-4 southwest' -o cast.mp4
+            ${ffcast} -d :0.1 -j '848x640+4-4 southwest' -o cast.mp4
 
     OPTIONS:
     -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
                      Output to stdout if - is used, disables --guessfmt
+    -d,--display:    Display to capture. Format: [hostname]:number.screen_number, e.g. :0.1
     -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -w,--xwininfo    Use xwininfo to define capture area, either by click or window IDs
     -j,--xjustcap:   Specify capture area geometry within command line; no manual selection
@@ -173,6 +176,13 @@ check_apps () {
 # {{{ checker: display
 check_display () {
     [ -z "${DISPLAY}" ] && { err "X not running"; exit 1; }
+    [ -z "${CAPDPY}" ] && CAPDPY=${DISPLAY} || {
+    [ "${CAPDPY}" != "${DISPLAY}" ] && \
+    wrn "Target Display %s is not current DISPLAY" "${CAPDPY}"
+    }
+    dbg "Checking display %s with \`xrectsel %s checkdpy'" "${CAPDPY}" "${CAPDPY}"
+    xrectsel "${CAPDPY}" checkdpy 2>"${DEBUG}" || {
+    err "Can't open display %s" "${CAPDPY}"; exit 1; }
 }
 # }}}
 # {{{ checker: outfile
@@ -197,7 +207,7 @@ check_outfile () {
 rootwin_xy () {
     # global: defines: RLEN_X RLEN_Y
     local regex='Width: +([0-9]+).*Height: +([0-9]+)'
-    local wininfo=$(LANG='' xwininfo -root 2>"${DEBUG}")
+    local wininfo=$(LANG='' xwininfo -display ${CAPDPY} -root 2>"${DEBUG}")
     if [[ "$wininfo" =~ $regex ]]
     then
         RLEN_X=${BASH_REMATCH[1]}
@@ -233,15 +243,15 @@ window_info () {
         for ((i=1;i<=${WINNO:-1};i++)); do
             WINIDS+=("$i")
         done
-        wininfo () { LANG='' xwininfo ; } ;;
+        wininfo () { LANG='' xwininfo -display ${CAPDPY}; } ;;
         root)
         msg "Fullscreen capture"
         WINIDS=($WINID)
-        wininfo () { LANG='' xwininfo -root ; } ;;
+        wininfo () { LANG='' xwininfo -display ${CAPDPY} -root ; } ;;
         *)
         msg "Selected window(s): %s" "$WINID"
         WINIDS=($WINID)
-        wininfo () { LANG='' xwininfo -id $WINID ; } ;;
+        wininfo () { LANG='' xwininfo -display ${CAPDPY} -id $WINID ; } ;;
     esac
     regex='Border width: +([0-9]+).*Corners: +\+(-?[0-9]+)\+(-?[0-9]+).* +-(-?[0-9]+)-(-?[0-9]+)'
     # support for multiple windows
@@ -278,7 +288,7 @@ rectang_sel () {
     msg "Select screen area to be captured by mouse drag"
     msg2 "Drag mouse with button one pressed"
     msg2 "Press any key on keyboard to abort"
-    local rsgeo=$(xrectsel)
+    local rsgeo=$(xrectsel ${CAPDPY})
     if [[ "${rsgeo}" =~ $regex ]]
     then
         LEN_X=${BASH_REMATCH[1]}
@@ -391,7 +401,7 @@ listx264prst () {
     PREFIX="${PREFIX:-/usr}"
     { ls -1 "${PREFIX}"/share/ffmpeg
       [ -d "${HOME}"/.ffmpeg ] && ls -1 "${HOME}"/.ffmpeg; } | sed 's/libx264-\(.*\)\.ffpreset/\1/'
-    [ -f "$1" ] && echo "$1"
+    [ -f "$1" ] && [ "$1" != list ] && echo "$1"
 }
 valuex264prst () {
     local prst="$1" PRST=
@@ -463,14 +473,14 @@ check_castspan () {
 # }}}
 # {{{ let me capture that with ffmpeg
 let_me_capture () {
-    msg "Capture started, press [q] to finish"
     dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s \"%s\"" \
-    ${FPS} ${LEN_X} ${LEN_Y} ${DISPLAY} ${POS_X} ${POS_Y} \
+    ${FPS} ${LEN_X} ${LEN_Y} ${CAPDPY} ${POS_X} ${POS_Y} \
     "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
+    msg "Capture started, press [q] to finish"
     # -threads 0 was in the original, but segfaults with, say -vcodec flv
     ffmpeg -r ${FPS} -v 1  \
         -s ${LEN_X}x${LEN_Y} -an \
-        -f x11grab -i ${DISPLAY}+${POS_X},${POS_Y} \
+        -f x11grab -i ${CAPDPY}+${POS_X},${POS_Y} \
         ${VCODEC} ${FORMAT} ${CASTSPAN} \
         "${OUTPUT}" 2>"${DEBUG}" || \
     err "ffmpeg: failed, try running with --debug"
@@ -485,6 +495,7 @@ let_me_capture () {
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
+        -d|--display)    CAPDPY="$2" ; shift 2 ;;
         -s|--xrectsel)   SELMODE='XRECTSEL' ; shift ;;
         -w|--xwininfo)   SELMODE='XWININFO' ; shift ;;
         -j|--xjustcap)   SELMODE='XJUSTCAP' ; SELGEOM="$2" ; shift 2 ;;

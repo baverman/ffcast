@@ -2,10 +2,16 @@
 
 Copyright (C) 2009 lolilolicon <lolilolicon@gmail.com>
 License: GPL v3
+Version: 0.2
 
 Description: you drag a rectangle area on screen with mouse,
              and it prints geometry in the format of wxh+x+y
 Compile: gcc -Wall -Wextra -o xrectsel xrectsel.c -lX11
+
+Usage: 1) xrectsel [display_name] e.g. xrectsel :1.0
+          if no display_name is specified, defaults to DISPLAY
+       2) xrectsel display_name checkdpy
+          checks if display_name can be opened as display
 
 Thanks to:
 HashBox, see:
@@ -24,7 +30,9 @@ main.c from scrot:
 
 static char self[] = "xrectsel";
 
-int main(void)
+int main(argc, argv)
+  int argc;
+  char **argv;
 {
   Display *dpy;
   XEvent ev;
@@ -38,10 +46,27 @@ int main(void)
   int x, y;
   int start_x, start_y, width, height;
 
-  dpy = XOpenDisplay(NULL);
-  if (!dpy) {
-    fprintf(stderr, "%s: Could not open display %s", self, getenv("DISPLAY"));
+  char *dpy_name;
+  if (argc > 1) {
+    dpy_name = argv[1];
+  } else {
+    dpy_name = getenv("DISPLAY");
   }
+
+  /* NULL equals getenv(DISPLAY) */
+  // dpy = XOpenDisplay(NULL);
+  dpy = XOpenDisplay(dpy_name);
+  if (!dpy) {
+    fprintf(stderr, "%s: Could not open display %s\n", self, dpy_name);
+    return EXIT_FAILURE;
+  }
+
+  /* merely check if specified display_name is valid if argv[2] is checkdpy */
+  if ((argc > 2) && (strcmp(argv[2], "checkdpy")) == 0) {
+    fprintf(stderr, "%s: Valid display_name %s\n", self, dpy_name);
+    XCloseDisplay(dpy);
+    return EXIT_SUCCESS;
+    }
 
   Cursor cursor;
   cursor = XCreateFontCursor(dpy, XC_crosshair);
