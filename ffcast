@@ -163,7 +163,7 @@ check_apps () {
     local app oops=
     for app in ffmpeg xwininfo xrectsel bc; do
         which "${app}" &>/dev/null || {
-        err "${app} not found in PATH"; oops=1; }
+        err "%s not found in PATH" "${app}"; oops=1; }
     done
     [ "${oops}" ] && {
     err "Required program(s) not found in PATH"; exit 1; }
@@ -186,9 +186,9 @@ check_outfile () {
     # or develop this further to a function check_extention()?
     [ "${OUTPUT}" == '-' ] && { GUESSFMT= ; return; }
     while [ -f "${OUTPUT}" ] ; do
-        wrn "output: file exists: ${OUTPUT}"
+        wrn "output: file exists: %s" "${OUTPUT}"
         OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
-        wrn "output: output name: ${OUTPUT}"
+        wrn "output: output name: %s" "${OUTPUT}"
     done
 }
 # }}}
@@ -203,20 +203,20 @@ rootwin_xy () {
         RLEN_Y=${BASH_REMATCH[2]}
     else
         err "xwininfo returned wrong Data (root):"
-        echo "$wininfo" ; exit 1
+        echo "$wininfo" >&2; exit 1
     fi
-    dbg "geometry: root: $RLEN_X x $RLEN_Y"
+    dbg "geometry: root: %sx%s" $RLEN_X $RLEN_Y
 }
 geo_sanity () {
     # global: LEN_X LEN_Y POS_X POS_Y RLEN_X RLEN_Y FFMOD DEBUG
     # mod FFMOD & inside screen
     LEN_X=$(tucker ${FFMOD} $LEN_X)
     LEN_Y=$(tucker ${FFMOD} $LEN_Y)
-    dbg "geometry: mod ${FFMOD}: $LEN_X x $LEN_Y"
+    dbg "geometry: mod %s: %sx%s" ${FFMOD} $LEN_X $LEN_Y
     LEN_X=$(min $LEN_X $(nipper ${FFMOD} $(( RLEN_X - POS_X ))))
     LEN_Y=$(min $LEN_Y $(nipper ${FFMOD} $(( RLEN_Y - POS_Y ))))
-    dbg "geometry: in screen: $LEN_X x $LEN_Y"
-    msg "Capture geometry: ${LEN_X}x${LEN_Y}+${POS_X}+${POS_Y}"
+    dbg "geometry: in screen:%sx%s" $LEN_X $LEN_Y
+    msg "Capture geometry: %sx%s+%s+%s" ${LEN_X} ${LEN_Y} ${POS_X} ${POS_Y}
 }
 # }}}
 # {{{ define capture area with xwininfo
@@ -224,7 +224,7 @@ window_info () {
     local wininfo regex SOP_X SOP_Y DEC_W=0
     case "${WINID,,}" in
         '')
-        msg "Click to select ${WINNO:-1} window(s) to be captured"
+        msg "Click to select %s window(s) to be captured" "${WINNO:-1}"
         for ((i=1;i<=${WINNO:-1};i++)); do
             WINIDS+=("$i")
         done
@@ -234,7 +234,7 @@ window_info () {
         WINIDS=($WINID)
         wininfo () { LANG='' xwininfo -root ; } ;;
         *)
-        msg "Selected window(s): $WINID"
+        msg "Selected window(s): %s" "$WINID"
         WINIDS=($WINID)
         wininfo () { LANG='' xwininfo -id $WINID ; } ;;
     esac
@@ -242,8 +242,8 @@ window_info () {
     # support for multiple windows
     for WINID in "${WINIDS[@]}"; do
         #echo -ne '\033[s'
-        msg2 "Selecting $WINID of ${#WINIDS[@]} window(s)"
-        wininfo=$(wininfo 2>"${DEBUG}") || { wrn "xwininfo error @ window $WINID"; continue; }
+        msg2 "Selecting %s of %s window(s)" "$WINID" ${#WINIDS[@]}
+        wininfo=$(wininfo 2>"${DEBUG}") || { wrn "xwininfo error @ window \`%s'" "$WINID"; continue; }
         if [[ "$wininfo" =~ $regex ]]
         then
             [ "$BORDERLESS" ] && DEC_W=${BASH_REMATCH[1]}
@@ -255,11 +255,11 @@ window_info () {
             SOP_Y=$(min ${SOP_Y} $(max 0 $(( ${BASH_REMATCH[5]} + DEC_W ))))
         else
             err "xwininfo returned wrong Data:"
-            echo "$wininfo" ; exit 1
+            echo "$wininfo" >&2 ; exit 1
         fi
         #echo -ne '\033[u\033[K'
         #echo -ne '\033[A\033[K'
-        dbg "geometry: ($POS_X,$POS_Y) ($SOP_X,$SOP_Y)"
+        dbg "geometry: (%s,%s) (%s,%s)" $POS_X $POS_Y $SOP_X $SOP_Y
     done
     [ -z "$wininfo" ] && { err "xwininfo failure"; exit 1; }
     unset wininfo
@@ -282,7 +282,7 @@ rectang_sel () {
         POS_Y=${BASH_REMATCH[4]}
     else
         err "xrectsel returned wrong Data:"
-        echo "$rsgeo" ; exit 1
+        echo "$rsgeo" >&2 ; exit 1
     fi
 }
 # }}}
@@ -312,12 +312,12 @@ g_translate () {
         if [[ "${geo}" =~ ${regex[$i]} ]];
         then
             matched=1
-            msg2 "Valid geometry ${geo//%/%%}"
+            msg2  "Valid geometry: %s" "${geo}"
             gcalc_$i
             break
         fi
     done
-    [ "${matched}" ] || { err "Invalid geometry: ${geo//%/%%}"; exit 1; }
+    [ "${matched}" ] || { err "Invalid geometry: %s" "${geo}"; exit 1; }
 
     for ((i=0;i<${#regex[@]};i++)); do
         unset gcalc_$i
@@ -348,8 +348,8 @@ valuex264prst () {
     [[ "${prst,,}" =~ ^\?$|^list$ ]] && { listx264prst "$prst" ; exit 0; }
     PRST=$(listx264prst "$prst" | grep -m1 -Fxi "$prst" 2>"${DEBUG}") && PRESET="$PRST" \
     || {
-    wrn "ffmpeg: x264 preset not found: $prst"
-    wrn "falling back to preset: ${PRESET}"; }
+    wrn "ffmpeg: x264 preset not found: %s" "${prst}"
+    wrn "falling back to preset: %s" "${PRESET}"; }
 }
 listEVcodecs () {
     echo x264
@@ -361,8 +361,8 @@ valueEVcodec () {
     [[ "${evc,,}" =~ ^\?$|^list$ ]] && { listEVcodecs; exit 0; }
     EVC=$(listEVcodecs | grep -Fxi "$evc" 2>"${DEBUG}") && CODEC="$EVC" \
     || {
-    wrn "ffmpeg: unsupported codec: $evc"
-    wrn "falling back to codec: ${CODEC}"; }
+    wrn "ffmpeg: unsupported codec: %s" "${evc}"
+    wrn "falling back to codec: %s" "${CODEC}"; }
 }
 listEVformats () {
     ffmpeg -formats 2>/dev/null | \
@@ -374,8 +374,8 @@ valueEVformat () {
     [[ "${evf,,}" =~ ^\?$|^list$ ]] && { listEVformats; exit 0; }
     EVF=$(listEVformats | grep -Fxi "$evf" 2>"${DEBUG}") && FORMAT="$EVF" \
     || {
-    wrn "ffmpeg: unsupported format: $evf"
-    wrn "falling back to format: ${FORMAT}"; }
+    wrn "ffmpeg: unsupported format: %s" "${evf}"
+    wrn "falling back to format: %s" "${FORMAT}"; }
 }
 check_vidcodec () {
     case "${CODEC,,}" in
@@ -399,15 +399,15 @@ check_vidcodec () {
     VCODEC="-vcodec ${VCODEC}"
     [ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
     # maybe add check_extention when GUESSFMT=1?
-    dbg "VCODEC: ${VCODEC}"
-    dbg "FORMAT: ${FORMAT}"
+    dbg "VCODEC: %s" "${VCODEC}"
+    dbg "FORMAT: %s" "${FORMAT}"
 }
 # }}}
 # {{{ checker: duration
 check_castspan () {
     [ "${CASTSPAN}" ] || return
     CASTSPAN=$(hhmmss2sec ${CASTSPAN})
-    msg "Capture duration limited to [$(sec2hhmmss ${CASTSPAN})]"
+    msg "Capture duration limited to [%s]" "$(sec2hhmmss ${CASTSPAN})"
     CASTSPAN="-t ${CASTSPAN}"
 }
 # }}}
@@ -421,7 +421,7 @@ let_me_capture () {
         ${VCODEC} ${FORMAT} ${CASTSPAN} \
         "${OUTPUT}" 2>"${DEBUG}" || \
     err "ffmpeg: failed, try running with --debug"
-    msg "Output filename: ${OUTPUT}"
+    msg "Output filename: %s" "${OUTPUT}"
 }
 # }}}
 # }}}
@@ -451,7 +451,7 @@ until [ -z "$1" ] ; do
         -o|--output)     OUTPUT="$2" ; shift 2 ;;
         -v|--debug)      DEBUG='/dev/stderr' ; shift ;;
            --nocolor)    COLORMSG= ; shift ;;
-        *)               err "invalid option $1" ; exit 1 ;;
+        *)               err "invalid option \`%s'" "$1" ; exit 1 ;;
     esac
 done
 # }}}
