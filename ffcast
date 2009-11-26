@@ -91,9 +91,10 @@ cat << EOF
          :: ${PRGDESC}
 
     Usage:  ${ffcast} -b -n 3 -o /tmp/cast.mkv
-            ${ffcast} -B -m -i "0x60001b 0x1c00016"
+            ${ffcast} -B -M -i "0x60001b 0x1c00016"
             ${ffcast} -s -t 5:30 -f flv -c flv -o cast.flv --debug
             ${ffcast} -j '20%,20% 960,600' -r 20 -p ./custom.ffpreset -o cast.mp4
+            ${ffcast} -j '848x640+4-4 southwest' -o cast.mp4
 
     OPTIONS:
     -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
@@ -101,7 +102,7 @@ cat << EOF
     -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -w,--xwininfo    Use xwininfo to define capture area, either by click or window IDs
     -j,--xjustcap:   Specify capture area geometry within command line; no manual selection
-    -m,--mod16       Force ffmpeg frame size to be mod 16
+    -M,--mod16       Force ffmpeg frame size to be mod 16
 
     -n,--winno:      Number of window(s) to be captured, use w/o --winid or --fullscreen
     -i,--winid:      Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
@@ -209,13 +210,17 @@ rootwin_xy () {
 }
 geo_sanity () {
     # global: LEN_X LEN_Y POS_X POS_Y RLEN_X RLEN_Y FFMOD DEBUG
-    # mod FFMOD & inside screen
+    # nwpole: inside screen
+    POS_X=$(min $RLEN_X $(max $POS_X 0))
+    POS_Y=$(min $RLEN_Y $(max $POS_Y 0))
+    # length: mod FFMOD
     LEN_X=$(tucker ${FFMOD} $LEN_X)
     LEN_Y=$(tucker ${FFMOD} $LEN_Y)
     dbg "geometry: mod %s: %sx%s" ${FFMOD} $LEN_X $LEN_Y
+    # length: inside screen after tucker
     LEN_X=$(min $LEN_X $(nipper ${FFMOD} $(( RLEN_X - POS_X ))))
     LEN_Y=$(min $LEN_Y $(nipper ${FFMOD} $(( RLEN_Y - POS_Y ))))
-    dbg "geometry: in screen:%sx%s" $LEN_X $LEN_Y
+    dbg "geometry: in screen:%sx%s+%s+%s" $LEN_X $LEN_Y $POS_X $POS_Y
     msg "Capture geometry: %sx%s+%s+%s" ${LEN_X} ${LEN_Y} ${POS_X} ${POS_Y}
 }
 # }}}
@@ -307,9 +312,54 @@ g_translate () {
 
     # about to add gravity stuff and human language...?
     # (yes, i kinda admire date -d)
+    
+    # '50% x 50% center' or '848x640+4-4 southwest' : 'wxh+x+y gravity'
+    regex[1]='([0-9]+%?) *[x|\*] *([0-9]+%?) *([\+|-] *[0-9]+%?) *([\+|-] *[0-9]+%?)'
+    gcalc_1 () {
+        local x y ox oy
+        LEN_X=$(percen2len ${BASH_REMATCH[1]} $RLEN_X)
+        LEN_Y=$(percen2len ${BASH_REMATCH[2]} $RLEN_Y)
+        x=$(percen2len ${BASH_REMATCH[3]} $RLEN_X)
+        y=$(percen2len ${BASH_REMATCH[4]} $RLEN_Y)
+        case "${geo,,}" in
+            *center*|*centre*)
+            ox=$(( (RLEN_X - LEN_X) / 2 ))
+            oy=$(( (RLEN_Y - LEN_Y) / 2 )) ;;
+            *northwest*)
+            ox=0
+            oy=0 ;;
+            *northeast*)
+            ox=$(( RLEN_X - LEN_X ))
+            oy=0 ;;
+            *southwest*)
+            ox=0
+            oy=$(( RLEN_Y - LEN_Y )) ;;
+            *southeast*)
+            ox=$(( RLEN_X - LEN_X ))
+            oy=$(( RLEN_Y - LEN_Y )) ;;
+            *north*)
+            ox=$(( (RLEN_X - LEN_X) / 2 ))
+            oy=0 ;;
+            *south*)
+            ox=$(( (RLEN_X - LEN_X) / 2))
+            oy=$(( RLEN_Y - LEN_Y )) ;;
+            *west*)
+            ox=0
+            oy=$(( (RLEN_Y - LEN_Y) / 2 )) ;;
+            *east*)
+            ox=$(( RLEN_X - LEN_X ))
+            oy=$(( (RLEN_Y - LEN_Y) / 2 )) ;;
+            *)
+            ox=0
+            oy=0 ;;
+        esac
+        POS_X=$(( ox + x ))
+        POS_Y=$(( oy + y ))
+    }
+
 
     for ((i=0;i<${#regex[@]};i++)); do
-        if [[ "${geo}" =~ ${regex[$i]} ]];
+        if [[ "${geo,,}" =~ ${regex[$i]} ]];
         then
             matched=1
             msg2  "Valid geometry: %s" "${geo}"
@@ -428,7 +478,7 @@ let_me_capture () {
 # }}}
 
 # {{{ options
-# left: d e k l q u x y z
+# left: d e k l m q u x y z
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
@@ -440,7 +490,7 @@ until [ -z "$1" ] ; do
         -B|--border)     BORDERLESS=  ; shift ;;
         -i|--winid)      WINID="$2" ; shift 2 ;;
         -n|--winno)      WINNO="$2" ; shift 2 ;;
-        -m|--mod16)      FFMOD="16" ; shift ;;
+        -M|--mod16)      FFMOD="16" ; shift ;;
         -t|--duration)   CASTSPAN="$2" ; shift 2 ;;
         -c|--codec)      valueEVcodec "$2" ; shift 2 ;;
         -f|--format)     valueEVformat "$2" ; shift 2 ;;
