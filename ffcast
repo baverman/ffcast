@@ -156,6 +156,7 @@ sec2hhmmss () {
 }
 percen2len () {
     local val="$1" all="$2"
+    val=$(sed 's/[^0-9%-]//g' <<< "$val")
     [[ "$val" =~ %$ ]] && { bc <<< "${val%\%} * $all / 100"; return; }
     echo "$val"
 }
@@ -324,13 +325,13 @@ g_translate () {
     # (yes, i kinda admire date -d)
     
     # '50% x 50% center' or '848x640+4-4 southwest' : 'wxh+x+y gravity'
-    regex[1]='([0-9]+%?) *[x|\*] *([0-9]+%?) *([\+|-] *[0-9]+%?) *([\+|-] *[0-9]+%?)'
+    regex[1]='([0-9]+%?) *[x|\*] *([0-9]+%?) *([\+|-] *[0-9]+%?)? *([\+|-] *[0-9]+%?)?'
     gcalc_1 () {
         local x y ox oy
         LEN_X=$(percen2len ${BASH_REMATCH[1]} $RLEN_X)
         LEN_Y=$(percen2len ${BASH_REMATCH[2]} $RLEN_Y)
-        x=$(percen2len ${BASH_REMATCH[3]} $RLEN_X)
-        y=$(percen2len ${BASH_REMATCH[4]} $RLEN_Y)
+        x=$(percen2len "${BASH_REMATCH[3]:-0}" $RLEN_X)
+        y=$(percen2len "${BASH_REMATCH[4]:-0}" $RLEN_Y)
         case "${geo,,}" in
             *center*|*centre*)
             ox=$(( (RLEN_X - LEN_X) / 2 ))
