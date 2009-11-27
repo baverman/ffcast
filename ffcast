@@ -152,9 +152,9 @@ sec2hhmmss () {
 }
 percen2len () {
     local val="$1" all="$2"
-    val=$(sed 's/[^0-9%-]//g' <<< "$val")
+    val=$(sed 's/[^0-9%\.-]//g' <<< "$val")
     [[ "$val" =~ %$ ]] && { bc <<< "${val%\%} * $all / 100"; return; }
-    echo "$val"
+    echo "${val%.*}"
 }
 # }}}
 # }}}
