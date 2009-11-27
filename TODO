@@ -1,1 +1,45 @@
-And I think it better to rip TODO out from main script.
+TODO
+
+* record sound
+* add predefined profiles/presets that export(encode) to video suitable for:
+    * youtube/google video
+    * ipod/iphone
+    * very small flash videos for websites
+
+
+MAYBE
+
+* multi-head support? only if ffmpeg could record multiple screens into one video
+* should I add an option that allows user to pass options directly to ffmpeg? \
+  if I do, will I have to use eval? -- eval is dangerous
+* ditch xwininfo and merge it's functionality into xrectsel.c, so -s option supports \
+  click and select window, like with `scrot -s'. to do this, take a look at:
+    scrot -> main.c -> scrot_sel_and_grab_image ()
+    xwininfo -> xwininfo.c etc
+* instead of calling ffmpeg directly from a shell script, is it worth it to rewrite \
+  ffcast in C, linking to the libraries ffmpeg brings and the X11 library.
+  The benefits may be a better control over the capture process:
+    * enable follow-cursor, it's said to be supported by xvidcap and some others.
+    * grab keyboard and define some shortcuts that will do things like:
+        * move/resize capture area live
+        * zooming
+        * pause/stop capture
+        * switch display on the fly
+        * toggle selection indicator visibility
+        * and all shortcuts should work globally on current display
+  The pitfall is, this may actually bring more problems than feature, and take some effort.
+* add ability to record tty. it's totally different from record X I suppose.
+  if this is implemented, i'd like seamless switching beween X and tty. \
+  that sounds tough huh.
+  ttyrec is a tty screencaster, see: http://0xcc.net/ttyrec/
+
+
+DONE
+
+* xwininfo -display ${display} -- so we add an option for display
+  xrecsel now takes argv[1] as display, so -d option should be fine now.
+* add support for multi-window recording, like with gimp
+* sanity: ffmpeg will quit if geometry is out of screen
+* use Corners instead of Width/Height for the sake of Border width
+* area selection, like drag a rectangle, instead of click windows (xrectsel)
+* option to limit capture duration
