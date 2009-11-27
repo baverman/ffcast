@@ -14,7 +14,7 @@
 ####################################################################################
 
 # {{{ defaults
-PRGNAME='ffcast' PRGVER='0.1'
+PRGNAME='ffcast' PRGVER='0.2'
 PRGDESC='take screencast using ffmpeg with the help of xwininfo and xrectsel'
 PRGSELF=$(readlink -f "$0")
 EXT='avi'
