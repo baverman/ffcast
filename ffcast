@@ -79,14 +79,14 @@ dbg () {
 }
 # }}}
 # {{{ usage
+version () {
+    echo "${PRGNAME} v${PRGVER}"
+}
 usage () {
 local ffcast=$(basename "${PRGSELF}")
 cat << EOF
 
-    % ${PRGNAME} % <${PRGVER}>
-         :: ${PRGDESC}
-
-    Usage:  ${ffcast} -b -n 3 -o /tmp/cast.mkv
+    USAGE:  ${ffcast} -b -n 3 -o /tmp/cast.mkv
             ${ffcast} -B -M -i "0x60001b 0x1c00016"
             ${ffcast} -s -t 5:30 -f flv -c flv -o cast.flv --debug
             ${ffcast} -j '20%,20% 960,600' -r 20 -p ./custom.ffpreset -o cast.mp4
@@ -118,7 +118,8 @@ cat << EOF
     -v,--debug       Print verbose debug info to stderr
        --printcmd    Don't actually call ffmpeg, but print the ffmpeg command line and exit
        --nocolor     Disable colors in messages
-    -h,--help        Show this message
+    -h,--help        Print this message, then exit
+       --version     Print version, then exit
 
 EOF
 }
@@ -499,6 +500,7 @@ let_me_capture () {
 until [ -z "$1" ] ; do
     case "$1" in
         -h|--help)       usage ; exit 0 ;;
+           --version)    version ; exit 0 ;;
         -d|--display)    CAPDPY="$2" ; shift 2 ;;
         -s|--xrectsel)   SELMODE='XRECTSEL' ; shift ;;
         -w|--xwininfo)   SELMODE='XWININFO' ; shift ;;
