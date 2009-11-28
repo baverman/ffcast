@@ -14,17 +14,16 @@
 ####################################################################################
 
 # {{{ defaults
-PRGNAME='ffcast' PRGVER='0.2'
-PRGDESC='take screencast using ffmpeg with the help of xwininfo and xrectsel'
-PRGSELF=$(readlink -f "$0")
-EXT='avi'
-OUTPUT="${PRGNAME}.$(date +%y%m%d%H%M%S).${EXT}"
+readonly PRGNAME='ffcast' PRGVER='0.2'
+readonly PRGDESC='take screencast using ffmpeg with the help of xwininfo and xrectsel'
+readonly PRGSELF=$(readlink -f "$0")
+OUTPUT="${PRGNAME}.$(date +%y%m%d%H%M%S).mkv"
 FPS='15'
 PRESET='lossless_slow'
-CODEC='x264'
+VCODEC='x264'
 FORMAT='h264'
-GUESSFMT='1'
 SELMODE='XWININFO'
+SELGEOM='100%x100%'
 BORDERLESS='1'
 CASTSPAN=
 FFMOD='2'
@@ -93,8 +92,8 @@ cat << EOF
             ${ffcast} -d :0.1 -j '848x640+4-4 southwest' -o cast.mp4
 
     OPTIONS:
-    -o,--output:     Output /path/to/file; filename extention is important with --guessfmt
-                     Output to stdout if - is used, disables --guessfmt
+    -o,--output:     Output /path/to/file; file extension is important if FORMAT is not set
+                     Output to stdout if - is used, and FORMAT must be set
     -d,--display:    Display to capture. Format: [hostname]:number.screen_number, e.g. :0.1
     -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -w,--xwininfo    Use xwininfo to define capture area, either by click or window IDs
@@ -107,10 +106,8 @@ cat << EOF
     -b,--borderless  Ignore borders of window(s) [default]
     -B,--border      Do not ignore borders (opposite to -b)
 
-    -c,--codec:      Codec to use (def: '${CODEC}', use ? or list for a list)
-    -f,--format:     Force format (def: '${FORMAT}', use ? or list for a list)
-    -g,--guessfmt    Let ffmpeg guess format according to filename extention [default]
-    -G,--noguessfmt  Do not guess format, respect default format: '${FORMAT}'
+    -c,--codec:      Codec to use (def: '${VCODEC:-void}', use ? or list for a list)
+    -f,--format:     Force format (def: '${FORMAT:-void}', use ? or list for a list)
     -p,--preset:     x264 preset. (def: '${PRESET}', use ? or list for a list)
     -r,--rate:       Frame Rate (FPS) (def: ${FPS})
     -t,--duration:   Restrict cast video duration in seconds; alternatively hh:mm:ss[.xxx]
@@ -159,6 +156,21 @@ percen2len () {
 # }}}
 # }}}
 # {{{ core functions
+# {{{ checker: configuration
+load_config () {
+    local CONFIG FFCONFIGS
+    CONFIG="${XDG_CONFIG_HOME:-${HOME}/.config}/ffcast/ffcast.conf"
+    [ -f "${CONFIG}" ] || return
+    FFCONFIGS=$(grep -E "^ *\w+=('([^']*(([^']{5})|('\"'\"'))*[^']*)*')?( *[; ]? *\w+=('([^']*(([^']{5})|('\"'\"'))*[^']*)*')?)* *( +#.*)*$" "${CONFIG}" | \
+                grep -oE "*\w+=('([^']*(([^']{5})|('\"'\"'))*[^']*)*')?( *[; ]? *\w+=('([^']*(([^']{5})|('\"'\"'))*[^']*)*')?)*")
+    eval "${FFCONFIGS}"
+    #msg 'Loaded config file: %s\n%s' "${CONFIG}" "${FFCONFIGS}"
+    check_config
+}
+check_config () {
+    :
+}
+# }}}
 # {{{ checker: apps
 check_apps () {
     local app oops=
@@ -191,8 +203,8 @@ check_outfile () {
     #OUTPUT="${OUTPUT}.${EXT}"; }
     # this block of code should be gone forever!!
     # -- well, only when we can deal with format AND codec well enough?
-    # or develop this further to a function check_extention()?
-    [ "${OUTPUT}" == '-' ] && { GUESSFMT= ; return; }
+    # or develop this further to a function check_extension()?
+    [ "${OUTPUT}" == '-' ] && return
     while [ -f "${OUTPUT}" ] ; do
         wrn "output: file exists: %s" "${OUTPUT}"
         OUTPUT="${OUTPUT%.*}.${PRGNAME:-0}.${OUTPUT##*.}"
@@ -416,17 +428,16 @@ listEVcodecs () {
 valueEVcodec () {
     local evc="$1" EVC=
     [[ "${evc,,}" =~ ^\?$|^list$ ]] && { listEVcodecs; exit 0; }
-    EVC=$(listEVcodecs | grep -Fxi "$evc" 2>"${DEBUG}") && CODEC="$EVC" \
+    EVC=$(listEVcodecs | grep -Fxi "$evc" 2>"${DEBUG}") && VCODEC="$EVC" \
     || {
     wrn "ffmpeg: unsupported codec: %s" "${evc}"
-    wrn "falling back to codec: %s" "${CODEC}"; }
+    wrn "falling back to codec: %s" "${VCODEC}"; }
 }
 listEVformats () {
     ffmpeg -formats 2>/dev/null | \
     sed '/^ \+[D ]E \+\([^ ]*\).*/!d;s//\1/'
 }
 valueEVformat () {
-    GUESSFMT=
     local evf="$1" EVF=
     [[ "${evf,,}" =~ ^\?$|^list$ ]] && { listEVformats; exit 0; }
     EVF=$(listEVformats | grep -Fxi "$evf" 2>"${DEBUG}") && FORMAT="$EVF" \
@@ -435,27 +446,26 @@ valueEVformat () {
     wrn "falling back to format: %s" "${FORMAT}"; }
 }
 check_vidcodec () {
-    case "${CODEC,,}" in
+    valuex264prst "${PRESET}"
+    valueEVcodec "${VCODEC}"
+    case "${VCODEC,,}" in
         x264)
         VCODEC="libx264 -vpre main -vpre ${PRESET} -crf 0" ;;
         gif)
         VCODEC="rawvideo -pix_fmt rgb24 -loop_output 0" #XXX ffmpeg sucks at gif
         FORMAT="gif" ;;
-        *)
-        VCODEC="${CODEC}" ;;
     esac
+    valueEVformat "${FORMAT}"
     case "${FORMAT,,}" in
         gif)
         wrn "ffmpeg: -vcodec gif is broken, using rawvideo"
         wrn "ffmpeg: gif output can be HUGE [uncompressed]" #XXX really?
         VCODEC="rawvideo -pix_fmt rgb24 -loop_output 0" #XXX ffmpeg sucks at gif
         ;;
-        *)
-        FORMAT="${FORMAT}"
     esac
-    VCODEC="-vcodec ${VCODEC}"
-    [ "${GUESSFMT}" ] && FORMAT= || FORMAT="-f ${FORMAT}"
-    # maybe add check_extention when GUESSFMT=1?
+    [ "${VCODEC}" ] && VCODEC="-vcodec ${VCODEC}"
+    [ "${FORMAT}" ] && FORMAT="-f ${FORMAT}"
+    # maybe add check_extension when GUESSFMT=1?
     dbg "VCODEC: %s" "${VCODEC}"
     dbg "FORMAT: %s" "${FORMAT}"
 }
@@ -496,39 +506,41 @@ let_me_capture () {
 # }}}
 
 # {{{ options
-# left: d e k l m q u x y z
-until [ -z "$1" ] ; do
-    case "$1" in
-        -h|--help)       usage ; exit 0 ;;
-           --version)    version ; exit 0 ;;
-        -d|--display)    CAPDPY="$2" ; shift 2 ;;
-        -s|--xrectsel)   SELMODE='XRECTSEL' ; shift ;;
-        -w|--xwininfo)   SELMODE='XWININFO' ; shift ;;
-        -j|--xjustcap)   SELMODE='XJUSTCAP' ; SELGEOM="$2" ; shift 2 ;;
-        -a|--fullscreen) WINID="root" ; shift ;;
-        -b|--borderless) BORDERLESS=1 ; shift ;;
-        -B|--border)     BORDERLESS=  ; shift ;;
-        -i|--winid)      WINID="$2" ; shift 2 ;;
-        -n|--winno)      WINNO="$2" ; shift 2 ;;
-        -M|--mod16)      FFMOD="16" ; shift ;;
-        -t|--duration)   CASTSPAN="$2" ; shift 2 ;;
-        -c|--codec)      valueEVcodec "$2" ; shift 2 ;;
-        -f|--format)     valueEVformat "$2" ; shift 2 ;;
-        -g|--guessfmt)   GUESSFMT=1 ; shift ;;
-        -G|--noguessfmt) GUESSFMT=  ; shift ;;
-        -r|--rate)       FPS="$2" ; shift 2 ;;
-        -p|--preset)     valuex264prst "$2" ; shift 2 ;;
-        -o|--output)     OUTPUT="$2" ; shift 2 ;;
-        -v|--debug)      DEBUG='/dev/stderr' ; shift ;;
-           --printcmd)   PRINTCMDONLY=1 ; shift ;;
-           --nocolor)    COLORMSG= ; shift ;;
-        *)               err "invalid option \`%s'" "$1" ; exit 1 ;;
-    esac
-done
+# left: e g k l m q u x y z
+parse_options () {
+    until [ -z "$1" ] ; do
+        case "$1" in
+            -h|--help)       usage ; exit 0 ;;
+               --version)    version ; exit 0 ;;
+            -d|--display)    CAPDPY="$2" ; shift 2 ;;
+            -s|--xrectsel)   SELMODE='XRECTSEL' ; shift ;;
+            -w|--xwininfo)   SELMODE='XWININFO' ; shift ;;
+            -j|--xjustcap)   SELMODE='XJUSTCAP' ; SELGEOM="$2" ; shift 2 ;;
+            -a|--fullscreen) WINID="root" ; shift ;;
+            -b|--borderless) BORDERLESS=1 ; shift ;;
+            -B|--border)     BORDERLESS=  ; shift ;;
+            -i|--winid)      WINID="$2" ; shift 2 ;;
+            -n|--winno)      WINNO="$2" ; shift 2 ;;
+            -M|--mod16)      FFMOD="16" ; shift ;;
+            -t|--duration)   CASTSPAN="$2" ; shift 2 ;;
+            -c|--codec)      VCODEC="$2" ; shift 2 ;;
+            -f|--format)     FORMAT="$2" ; shift 2 ;;
+            -r|--rate)       FPS="$2" ; shift 2 ;;
+            -p|--preset)     PRESET="$2" ; shift 2 ;;
+            -o|--output)     OUTPUT="$2" ; shift 2 ;;
+            -v|--debug)      DEBUG='/dev/stderr' ; readonly DEBUG; shift ;;
+               --printcmd)   PRINTCMDONLY=1 ; shift ;;
+                --nocolor)   COLORMSG= ; shift ;;
+            *)               err "invalid option \`%s'" "$1" ; exit 1 ;;
+        esac
+    done
+}
 # }}}
 
 # {{{ main
 check_apps
+load_config
+parse_options "$@"
 check_display
 check_outfile
 let_you_select
