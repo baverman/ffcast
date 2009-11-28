@@ -168,7 +168,9 @@ load_config () {
     check_config
 }
 check_config () {
-    :
+    # this is fatal, since we directly redirect stuff to DEBUG
+    [ "${DEBUG}" == '/dev/stderr' ] || [ "${DEBUG}" == '/dev/null' ] || {
+    err "Invalid configuration: DEBUG='%s'" "${DEBUG}" ; exit 1; }
 }
 # }}}
 # {{{ checker: apps
