@@ -98,11 +98,11 @@ cat << EOF
     -s,--xrectsel    Select capture area by mouse dragging (mimics scrot -s, but must drag)
     -w,--xwininfo    Use xwininfo to define capture area, either by click or window IDs
     -j,--xjustcap:   Specify capture area geometry within command line; no manual selection
+    -a,--fullscreen  Capture full screen, aka \`-i root\`
     -M,--mod16       Force ffmpeg frame size to be mod 16
 
     -n,--winno:      Number of window(s) to be captured, use w/o --winid or --fullscreen
     -i,--winid:      Window ID to capture (see xwininfo), format: "ID1 ID2 ID3" (quoted)
-    -a,--fullscreen  Capture full screen, aka \`-i root\`
     -b,--borderless  Ignore borders of window(s) [default]
     -B,--border      Do not ignore borders (opposite to -b)
 
@@ -273,12 +273,11 @@ window_info () {
         if [[ "$wininfo" =~ $regex ]]
         then
             [ "$BORDERLESS" ] && DEC_W=${BASH_REMATCH[1]}
-            # inside screen, they must be -ge 0 [max]
             # multiple windows, we pick the [min]
-            POS_X=$(min ${POS_X} $(max 0 $(( ${BASH_REMATCH[2]} + DEC_W ))))
-            POS_Y=$(min ${POS_Y} $(max 0 $(( ${BASH_REMATCH[3]} + DEC_W ))))
-            SOP_X=$(min ${SOP_X} $(max 0 $(( ${BASH_REMATCH[4]} + DEC_W ))))
-            SOP_Y=$(min ${SOP_Y} $(max 0 $(( ${BASH_REMATCH[5]} + DEC_W ))))
+            POS_X=$(min ${POS_X} $(( ${BASH_REMATCH[2]} + DEC_W )))
+            POS_Y=$(min ${POS_Y} $(( ${BASH_REMATCH[3]} + DEC_W )))
+            SOP_X=$(min ${SOP_X} $(( ${BASH_REMATCH[4]} + DEC_W )))
+            SOP_Y=$(min ${SOP_Y} $(( ${BASH_REMATCH[5]} + DEC_W )))
         else
             err "xwininfo returned wrong Data:"
             echo "$wininfo" >&2 ; exit 1
