@@ -544,8 +544,8 @@ load_config
 parse_options "$@"
 check_display
 check_outfile
-let_you_select
 check_vidcodec
+let_you_select
 check_castspan
 let_me_capture
 # }}}
