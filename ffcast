@@ -428,6 +428,7 @@ listEVcodecs () {
 }
 valueEVcodec () {
     local evc="$1" EVC=
+    [ -z "$evc" ] && return
     [[ "${evc,,}" =~ ^\?$|^list$ ]] && { listEVcodecs; exit 0; }
     EVC=$(listEVcodecs | grep -Fxi "$evc" 2>"${DEBUG}") && VCODEC="$EVC" \
     || {
@@ -440,6 +441,7 @@ listEVformats () {
 }
 valueEVformat () {
     local evf="$1" EVF=
+    [ -z "$evf" ] && return
     [[ "${evf,,}" =~ ^\?$|^list$ ]] && { listEVformats; exit 0; }
     EVF=$(listEVformats | grep -Fxi "$evf" 2>"${DEBUG}") && FORMAT="$EVF" \
     || {
