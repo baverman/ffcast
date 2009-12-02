@@ -482,12 +482,12 @@ check_castspan () {
 # {{{ let me capture that with FFmpeg
 let_me_capture () {
     [ "${PRINTCMDONLY}" ] && {
-    msg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s \"%s\"" \
+    msg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s -sameq \"%s\"" \
     ${FPS} ${LEN_X} ${LEN_Y} ${CAPDPY} ${POS_X} ${POS_Y} \
     "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
     exit 0; }
 
-    dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s \"%s\"" \
+    dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s -sameq \"%s\"" \
     ${FPS} ${LEN_X} ${LEN_Y} ${CAPDPY} ${POS_X} ${POS_Y} \
     "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
 
@@ -497,7 +497,7 @@ let_me_capture () {
     ffmpeg -r ${FPS} -v 1  \
         -s ${LEN_X}x${LEN_Y} -an \
         -f x11grab -i ${CAPDPY}+${POS_X},${POS_Y} \
-        ${VCODEC} ${FORMAT} ${CASTSPAN} \
+        ${VCODEC} ${FORMAT} ${CASTSPAN} -sameq \
         "${OUTPUT}" 2>"${DEBUG}" || \
     err "ffmpeg: failed, try running with --debug"
     msg "Output filename: %s" "${OUTPUT}"
