@@ -1,0 +1,131 @@
+.TH "FFCAST" "1" "2009-11-25" "ffcast 0.2" ""
+.SH NAME
+ffcast - Take screencast using ffmpeg with the help of xwininfo and xrectsel
+.SH SYNOPSIS
+\fBffcast\fR [options]
+.SH DESCRIPTION
+\fBffcast\fR is a screencast script written in bash. It calls ffmpeg to capture any specified area on the target X11 display. It supports all video codecs and formats ffmpeg supports. Before ffcast actually calls ffmpeg to record the video, it determines the capture area either by interactively asking the user to select one, or by reading the geometry defined by command line. In the interactive mode, the user can either freely select a rectangle area, or select one or more windows by clicking them.
+.SH OPTIONS
+.TP
+\fB-o, --output\fR \fI<outfile>\fR
+Specify output filename. Filename extension is essential if \fBFORMAT\fR is not set either by config file or from command line using \fB--format\fR. If \fI<outfile>\fR is \fB-\fR, output goes to standard output, in which case \fBFORMAT\fR must be set.
+.TP
+\fB-d, --display\fR \fI<display>\fR
+Display to connect to. Format: \fB[hostname]:number.screen_number\fR, e.g. `:0.1'. By default, ffcast reads the environment variable \fBDISPLAY\fR as display.
+.TP
+\fB-a, --fullscreen\fR
+Capture full screen, identical to `\fB--winid root\fR'
+.TP
+\fB-w, --xwininfo\fR
+Use \fBxwininfo\fR to define capture area, either by click or by specifying window \fBid\fRs with the \fB--winid\fR option. This is useful for capturing events inside an existing window. You can also select multiple windows, specifying window number with the \fB--winno\fR option.
+.TP
+\fB-s, --xrectsel\fR
+Freely select capture area by mouse dragging using \fBxrectsel\fR. When ffcast is triggered with this option, your mouse cursor changes to a cross. You select your capture area by dragging your mouse with button 1 pressed. Then, if button 1 is released, capture will start instantly; if keyboard is pressed instead, capture will abort. Think about `\fBscrot -s\fR'.
+.TP
+\fB-j, --xjustcap\fR \fI<geometry>\fR
+This option enables the user to tell ffcast about the exact capture area using \fI<geometry>\fR, thus no manual selection is performed.
+This is free selection, like \fB--xrectsel\fR, just without the need of touching your mouse.
+.IP
+Supported \fI<geometry>\fR \fBformats\fR are:
+.br
+\fB*1) "(x1,y1) (x2,y2)"\fR
+.br
+(x1,y1) and (x2,y2) are the positions of two diagonal corners of the rectangle area in question.
+.br
+The \fBcomma\fR between xN and yN is required, but the parentheses are optional.
+.br
+Any of the \fBx1, y1, x2, y2\fR parameters consists of digits, or is a \fBpercentage\fR value written as digits%
+.br
+If any of \fBx1, y1, x2, y2\fR is written as \fBpercentage\fR, e.g. 20%, it is equivalent to 20% of the full x or y resolution of you screen.
+.br
+\fB*2) "wxh-x+y gravity"\fR
+.br
+\fBw\fR: Width of the rectangle area.
+.br
+\fBh\fR: Height of the rectangle area.
+.br
+\fB-x\fR: Additional horizontal positioning of the rectangle, added to the initial positioning by \fBgravity\fR. Optional.
+.br
+\fB+y\fR: Additional vertical positioning of the rectangle, added to the initial positioning by \fBgravity\fR. Optional.
+.br
+\fBgravity\fR: Determines the initial positioning of the rectangle. Valid values are: \fBNorthwest, North, Northeast, East, Southeast, South, Southwest, West and Center\fR(or \fBCentre\fR). Optional.
+.br
+Any of \fBw, h, x, y\fR parameters consists of digits, or is a \fBpercentage\fR value written as digits%
+.TP
+\fB-M, --mod16\fR
+Force capture frame size to be \fBmod 16\fR. ffmpeg requires video frame size to be \fBmod 2\fR, which is the default behavior of ffcast. By using this option, you tell ffcast to always adjust capture geometry to \fBmod 16\fR. This may improve video quality for the x264 encoder, but not too much.
+.TP
+\fB-n, --winno\fR \fI<number>\fR
+Number of window(s) to be captured. Only effective with \fB--xwininfo\fR, and without \fB--winid\fR  option. This enables capturing multiple windows. Think about the \fBGIMP\fR, and you'll find this option useful.
+.TP
+\fB-i, --winid\fR \fI<idlist>\fR
+Specify windows to be capture by window \fBid\fRs. \fI<idlist>\fR is a list of whitespace seperated window \fBid\fRs quoted inside double or single quotes, e.g. "0x80000a 0x800039 0x160003c". see \fBxwininfo\fR(1) \fB-id\fR option.
+.TP
+\fB-b, --borderless\fR
+Ignore borders of window(s).
+.TP
+\fB-B, --border\fR
+Do not ignore borders. This, as well as \fB--borderless\fR, is only effective with \fB--xwininfo\fR, obviously.
+.TP
+\fB-c, --codec\fR \fI<codec>\fR
+Force Output Video Codec. Default value: 'x264'. Use ? or list for a list. Use '' to let ffmpeg guess video codec from output extension.
+.TP
+\fB-f, --format\fR \fI<format>\fR
+Force Output Format. Default value: 'h264'. Use ? or list for a list. Use '' to let ffmpeg guess video format from output extension.
+.TP
+\fB-p, --preset\fR \fI<ffpreset>\fR
+x264 preset. Default value: 'lossless_slow'. Use ? or list for a list. Dive into \fI/usr/share/ffmpeg/*.ffpreset\fR for details. See \fBffmpeg\fR(1) for more info (`\fBPreset files\fR' section).
+.TP
+\fB-r, --rate\fR \fI<fps>\fR
+Set frame rate (fps). Default value: 15. Set it to a higher level if you find your video choppy.
+.TP
+\fB-t, --duration\fR \fI<time>\fR
+Restrict cast video duration in \fBseconds\fR. \fBhh:mm:ss[.xxx]\fR format is also fully supported. This is useful for usage in scripts. It's also reported by lazy people how this has saved there lives by escaping them from the final \fI[q]\fR press.
+.TP
+\fB--printcmd\fR
+Don't actually call ffmpeg, but print the ffmpeg command line and exit. You can then further customize this command and then run it directly to do the real job. It is meant for slightly advanced users or curious people who likes to experiment.
+.TP
+\fB-v, --debug\fR
+Print verbose debug info to standard error.
+.TP
+\fB--nocolor\fR
+Disable colors in messages.
+.TP
+\fB-h, --help\fR
+Print help message, then exit.
+.TP
+\fB--version\fR
+Print version info, then exit.
+.SH CONFIGURATION
+At start up, ffcast reads user configurations defined in \fI$XDG_CONFIG_HOME/ffcast/ffcast.conf\fR, if \fB$XDG_CONFIG_HOME\fR is not defined, \fI$HOME/.config/ffcast/ffcast.conf\fR is read instead. An example configuration file with default values and comments can be found at \fI$PREFIX/share/ffcast/doc/ffcast.conf\fR, where \fB$PREFIX\fR is usually either \fI/usr\fR or \fI/usr/local\fR as per build-time settings.
+Configuration options in the configuration file are all available from the command line, and will be overriden by command line options.
+.SH ENVIRONMENT
+\fBDISPLAY\fR To get the default host and display number.
+.SH EXAMPLE
+I want to test a new window manager inside a window. So I first edit my ~/.xinitrc to tell startx to run it instead of my current wm.
+.P
+Then I start a new X session inside a new window with
+.IP
+\fBstartx -- /usr/bin/Xephyr :2\fR
+.P
+Then I'd like to record this window by clicking it with
+.IP
+\fBffcast -d :2.0 -o wmtest.mp4\fR
+.SH NOTES
+.P
+GIF output is huge and uncompressed due to very limited gif support from ffmpeg.
+It's best not to use gif output. But if you must, a workaround for now is piping output to convert (from ImageMagick):
+.IP
+\fBffcast -s -t 6 -r 3 -f gif -o - | convert gif:- ffcast.gif\fR
+.SH FILES
+\fI/usr/bin/ffcast\fR
+.br
+\fI/usr/bin/xrectsel\fR
+.br
+\fI/usr/share/ffcast/doc/ffcast.conf\fR
+.br
+Locations may differ due to make settings.
+.SH SEE ALSO
+\fBffmpeg\fR(1), \fBxwininfo\fR(1)
+.SH AUTHORS
+ffcast is written by lolilolicon<lolilolicon@gmail.com>
