@@ -13,7 +13,7 @@
 ## Original Author: Copyright (c) Michal Witkowski 2009                           ##
 ####################################################################################
 
-# {{{ defaults
+#  defaults
 readonly PRGNAME='ffcast' PRGVER='0.2'
 readonly PRGDESC='take screencast using ffmpeg with the help of xwininfo and xrectsel'
 readonly PRGSELF=$(readlink -f "$0")
@@ -31,11 +31,11 @@ COLORMSG='1'
 DEBUG='/dev/null'
 CAPDPY=${DISPLAY}
 PRINTCMDONLY=
-# }}}
+# 
 
-# {{{ functions
-# {{{ help functions
-# {{{ helper: printing
+#  functions
+#  help functions
+#  helper: printing
 msg () {
     local mesg=$1; shift
     if [ $COLORMSG ]; then
@@ -76,8 +76,8 @@ dbg () {
         printf "(DD) ${mesg}\n" "$@" >&2
     fi
 }
-# }}}
-# {{{ usage
+# 
+#  usage
 version () {
     echo "${PRGNAME} v${PRGVER}"
 }
@@ -120,8 +120,8 @@ cat << EOF
 
 EOF
 }
-# }}}
-# {{{ helper: maths
+# 
+#  helper: maths
 # tucker M N expands N to mod M
 # nipper M N shrinks N to mod M
 tucker () { local m=$1; shift; echo $(( $1 + ($m - ($1 % $m)) % $m )); }
@@ -153,10 +153,10 @@ percen2len () {
     [[ "$val" =~ %$ ]] && { bc <<< "${val%\%} * $all / 100"; return; }
     echo "${val%.*}"
 }
-# }}}
-# }}}
-# {{{ core functions
-# {{{ checker: configuration
+# 
+# 
+#  core functions
+#  checker: configuration
 load_config () {
     local CONFIG FFCONFIGS
     CONFIG="${XDG_CONFIG_HOME:-${HOME}/.config}/ffcast/ffcast.conf"
@@ -172,8 +172,8 @@ check_config () {
     [ "${DEBUG}" == '/dev/stderr' ] || [ "${DEBUG}" == '/dev/null' ] || {
     err "Invalid configuration: DEBUG='%s'" "${DEBUG}" ; exit 1; }
 }
-# }}}
-# {{{ checker: apps
+# 
+#  checker: apps
 check_apps () {
     local app oops=
     for app in ffmpeg xwininfo xrectsel bc; do
@@ -183,8 +183,8 @@ check_apps () {
     [ "${oops}" ] && {
     err "Required program(s) not found in PATH"; exit 1; }
 }
-# }}}
-# {{{ checker: display
+# 
+#  checker: display
 check_display () {
     [ -z "${DISPLAY}" ] && { err "X not running"; exit 1; }
     [ -z "${CAPDPY}" ] && CAPDPY=${DISPLAY} || {
@@ -195,8 +195,8 @@ check_display () {
     xrectsel "${CAPDPY}" checkdpy 2>"${DEBUG}" || {
     err "Can't open display %s" "${CAPDPY}"; exit 1; }
 }
-# }}}
-# {{{ checker: outfile
+# 
+#  checker: outfile
 check_outfile () {
     # is there a way to do ${OUTPUT##*.,,} ?
     #( ext="${OUTPUT##*.}"; [[ "${ext,,}" =~ ^avi$|^mkv$|^mp4$ ]] ) || {
@@ -213,8 +213,8 @@ check_outfile () {
         wrn "output: output name: %s" "${OUTPUT}"
     done
 }
-# }}}
-# {{{ checker: geometry
+# 
+#  checker: geometry
 rootwin_xy () {
     # global: defines: RLEN_X RLEN_Y
     local regex='Width: +([0-9]+).*Height: +([0-9]+)'
@@ -244,8 +244,8 @@ geo_sanity () {
     dbg "geometry: in screen:%sx%s+%s+%s" $LEN_X $LEN_Y $POS_X $POS_Y
     msg "Capture geometry: %sx%s+%s+%s" ${LEN_X} ${LEN_Y} ${POS_X} ${POS_Y}
 }
-# }}}
-# {{{ define capture area with xwininfo
+# 
+#  define capture area with xwininfo
 window_info () {
     local wininfo regex SOP_X SOP_Y DEC_W=0
     case "${WINID,,}" in
@@ -291,8 +291,8 @@ window_info () {
     LEN_X=$(( RLEN_X - POS_X - SOP_X ))
     LEN_Y=$(( RLEN_Y - POS_Y - SOP_Y ))
 }
-# }}}
-# {{{ define capture area with xrectsel
+# 
+#  define capture area with xrectsel
 rectang_sel () {
     local regex='([0-9]+)x([0-9]+)\+([0-9]+)\+([0-9]+)'
     msg "Select screen area to be captured by mouse drag"
@@ -310,8 +310,8 @@ rectang_sel () {
         echo "$rsgeo" >&2 ; exit 1
     fi
 }
-# }}}
-# {{{ define capture area with prophecy
+# 
+#  define capture area with prophecy
 g_translate () {
     msg "Validating user-defined capture geometry"
     local geo="$1" regex i matched
@@ -393,8 +393,8 @@ g_translate () {
         unset gcalc_$i
     done
 }
-# }}}
-# {{{ let you select area
+# 
+#  let you select area
 let_you_select () {
     rootwin_xy
     case "${SELMODE}" in
@@ -404,8 +404,8 @@ let_you_select () {
     esac
     geo_sanity
 }
-# }}}
-# {{{ checker: codecs
+# 
+#  checker: codecs
 listx264prsts () {
     local PREFIX=$(ffmpeg -version 2>&1 | sed '/.*configuration:.*--prefix=\([^ ]*\).*/!d;s//\1/')
     PREFIX="${PREFIX:-/usr}"
@@ -472,16 +472,16 @@ check_vidcodec () {
     dbg "VCODEC: %s" "${VCODEC}"
     dbg "FORMAT: %s" "${FORMAT}"
 }
-# }}}
-# {{{ checker: duration
+# 
+#  checker: duration
 check_castspan () {
     [ "${CASTSPAN}" ] || return
     CASTSPAN=$(hhmmss2sec ${CASTSPAN})
     msg "Capture duration limited to [%s]" "$(sec2hhmmss ${CASTSPAN})"
     CASTSPAN="-t ${CASTSPAN}"
 }
-# }}}
-# {{{ let me capture that with FFmpeg
+# 
+#  let me capture that with FFmpeg
 let_me_capture () {
     [ "${PRINTCMDONLY}" ] && {
     msg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s -sameq \"%s\"" \
@@ -489,26 +489,25 @@ let_me_capture () {
     "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
     exit 0; }
 
-    dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s -sameq \"%s\"" \
+    dbg "ffmpeg: command line:\nffmpeg -r %s -v 1 -s %sx%s -an -f x11grab -i %s+%s,%s %s %s %s -sameq -f alsa -i hw:0,0 -acodec libmp3lame -ab 96k \"%s\"" \
     ${FPS} ${LEN_X} ${LEN_Y} ${CAPDPY} ${POS_X} ${POS_Y} \
     "${VCODEC}" "${FORMAT}" "${CASTSPAN}" "${OUTPUT}"
 
     msg "Capture started, press [q] to finish"
     # -threads 0 was in the original, but segfaults with, say -vcodec flv
     # Options that may help: -sameq
-    ffmpeg -r ${FPS} -v 1  \
-        -s ${LEN_X}x${LEN_Y} -an \
-        -f x11grab -i ${CAPDPY}+${POS_X},${POS_Y} \
-        ${VCODEC} ${FORMAT} ${CASTSPAN} -sameq \
+    ffmpeg -v 1 -f alsa -i hw:0,0 \
+        -f x11grab -s ${LEN_X}x${LEN_Y} -r ${FPS} -i ${CAPDPY}+${POS_X},${POS_Y} \
+        ${VCODEC} ${CASTSPAN} -sameq -acodec libfaac -ab 128k \
         "${OUTPUT}" 2>"${DEBUG}" || \
     err "ffmpeg: failed, try running with --debug"
     msg "Output filename: %s" "${OUTPUT}"
 }
-# }}}
-# }}}
-# }}}
+# 
+# 
+# 
 
-# {{{ options
+#  options
 # left: e g k l m q u x y z
 parse_options () {
     until [ -z "$1" ] ; do
@@ -538,9 +537,9 @@ parse_options () {
         esac
     done
 }
-# }}}
+# 
 
-# {{{ main
+#  main
 check_apps
 load_config
 parse_options "$@"
@@ -550,5 +549,5 @@ check_vidcodec
 let_you_select
 check_castspan
 let_me_capture
-# }}}
+# 
 # vim: fdm=marker
